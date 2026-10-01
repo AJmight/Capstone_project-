@@ -1,0 +1,46 @@
+supplier_name,item_id,offered_unit_price_ugx,min_order_qty,lead_time_days
+Kampala Office Supplies,ITM001,476,20,3
+Nakawa Stationers,ITM001,500,10,2
+Entebbe Traders Ltd,ITM001,547,15,5
+Kampala Office Supplies,ITM002,2342,20,3
+Nakawa Stationers,ITM002,2546,10,2
+Entebbe Traders Ltd,ITM002,2654,15,5
+Kampala Office Supplies,ITM003,938,20,3
+Nakawa Stationers,ITM003,1003,10,2
+Entebbe Traders Ltd,ITM003,1087,15,5
+Kampala Office Supplies,ITM004,281,20,3
+Nakawa Stationers,ITM004,295,10,2
+Entebbe Traders Ltd,ITM004,329,15,5
+Kampala Office Supplies,ITM005,188,20,3
+Nakawa Stationers,ITM005,200,10,2
+Entebbe Traders Ltd,ITM005,217,15,5
+Kampala Office Supplies,ITM006,11363,20,3
+Nakawa Stationers,ITM006,12040,10,2
+Entebbe Traders Ltd,ITM006,12971,15,5
+Kampala Office Supplies,ITM007,8215,20,3
+Nakawa Stationers,ITM007,8399,10,2
+Entebbe Traders Ltd,ITM007,9259,15,5
+Kampala Office Supplies,ITM008,1410,20,3
+Nakawa Stationers,ITM008,1493,10,2
+Entebbe Traders Ltd,ITM008,1631,15,5
+Kampala Office Supplies,ITM009,3298,20,3
+Nakawa Stationers,ITM009,3474,10,2
+Entebbe Traders Ltd,ITM009,3818,15,5
+Kampala Office Supplies,ITM010,1867,20,3
+Nakawa Stationers,ITM010,1996,10,2
+Entebbe Traders Ltd,ITM010,2203,15,5
+Kampala Office Supplies,ITM011,775,20,3
+Nakawa Stationers,ITM011,786,10,2
+Entebbe Traders Ltd,ITM011,854,15,5
+Kampala Office Supplies,ITM012,1129,20,3
+Nakawa Stationers,ITM012,1220,10,2
+Entebbe Traders Ltd,ITM012,1315,15,5
+Kampala Office Supplies,ITM013,867,20,3
+Nakawa Stationers,ITM013,895,10,2
+Entebbe Traders Ltd,ITM013,958,15,5
+Kampala Office Supplies,ITM014,1444,20,3
+Nakawa Stationers,ITM014,1512,10,2
+Entebbe Traders Ltd,ITM014,1627,15,5
+Kampala Office Supplies,ITM015,14527,20,3
+Nakawa Stationers,ITM015,15092,10,2
+Entebbe Traders Ltd,ITM015,15881,15,5

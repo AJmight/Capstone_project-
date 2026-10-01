@@ -1,0 +1,16 @@
+item_id,item_name,category,current_stock,reorder_point,unit_cost_ugx
+ITM001,Bic Pens (Blue),Stationery,5,20,500
+ITM002,A4 Exercise Books,Stationery,45,10,2500
+ITM003,Rulers 30cm,Stationery,2,15,1000
+ITM004,Pencils HB,Stationery,60,25,300
+ITM005,Erasers,Stationery,8,20,200
+ITM006,A4 Printing Paper (Rim),Stationery,12,15,12000
+ITM007,Stapler Medium,Office,3,5,8500
+ITM008,Staple Pins (Box),Office,40,20,1500
+ITM009,Files (Box),Office,6,10,3500
+ITM010,Envelopes A4 (Pack),Office,25,15,2000
+ITM011,Cellotape (Roll),Office,4,10,800
+ITM012,Glue Stick,Stationery,18,20,1200
+ITM013,Marker Pens (Black),Stationery,7,15,900
+ITM014,Notebooks A5,Stationery,30,20,1500
+ITM015,Calculator (Basic),Electronics,2,5,15000
