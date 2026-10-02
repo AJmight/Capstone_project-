@@ -1,17 +1,68 @@
-Model Selection
-Chosen model: Gemini Flash (Google AI Studio)
+# SME Procurement Support Agent
 
-We selected Gemini Flash as the foundation model for the SME Procurement Support Agent for four reasons:
+BSE4104 Emerging Trends in Software Engineering — AI-Native & Agentic Engineering Capstone
+(Makerere University, 2026/2027).
 
-1.Generous free tier — 1M-token context window and a high daily token quota, with no credit card required. This satisfies our "free APIs only" constraint while allowing us to ingest full synthetic inventory and quotation CSVs without truncation.
+**Our system helps** a small Ugandan stationery/office-supplies shop owner and their junior staff
+**prepare purchase requisitions**. AI is used to read stock, purchase history and supplier quotes,
+explain findings and draft requisitions. Deterministic software remains responsible for data,
+validation and (from Week 4) all calculations. The AI **may draft and explain** but **may not approve,
+order, pay or contact suppliers** — a human approves every requisition. We build and evaluate it on
+synthetic CSV data.
 
-2.Native function calling and structured JSON output — essential for Week 4, where the agent must call tools such as get_inventory_status() and compare_supplier_quotes() and return schema-compliant arguments.
+> AI supports, never decides.
 
-3.Low latency — stable response times suitable for a multi-step agent loop running on the mobile hotspot connections typical of our project environment.
+## Status
 
-4.Large context window — supports RAG-style grounding (Week 3) by allowing retrieved history and stock data to be passed in a single call.
+| Week | Focus | Status |
+|:---:|:---|:---|
+| 1 | Problem framing, user stories, AI Boundary Matrix | Done (documents in `.docx`; to be copied into `docs/requirements/`) |
+| 2 | Model integration and prompting | Done — prompt v1.2.0, 10-case evaluation 9/10 (`docs/evaluation/week2-prompt-evaluation.md`) |
+| 3 | Context / RAG | Not started |
+| 4 | Tools and function calling | Not started (next) |
+| 5 | Bounded agent | Not started |
+| 6–8 | Memory, evaluation & guardrails, release | Not started |
 
-Rejected alternatives: GPT-4o mini has no sustainable free tier; Groq (Llama 3.3) is faster but offers a smaller context window and less mature structured-output enforcement for our CSV-heavy workload.
+## Setup (Windows PowerShell)
 
-Problem and mitigation: Google's free-tier documentation states that submitted data may be used to improve their products. We therefore use mainly synthetic data. This aligns with the data boundary already defined in our Project Charter.
+```powershell
+git clone https://github.com/AJmight/Capstone_project-.git
+cd Capstone_project-
+py -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env      # then put your own key from aistudio.google.com in .env
+```
 
+## Run
+
+```powershell
+py src\test_models.py             # which Gemini models your key can use (no quota used)
+py src\test_connection.py         # one short request through the fallback chain
+py src\ai_engine.py               # analyse current inventory -> JSON
+py tests\test_week2_cases.py      # 10 prompt test cases -> evidence\week2\
+py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
+```
+
+## Repository layout
+
+| Path | Contents |
+|:---|:---|
+| `src/llm_client.py` | Shared Gemini client: primary model + automatic fallback chain, timeouts, call traces |
+| `src/ai_engine.py` | Loads the versioned prompt and CSVs, calls the model, parses JSON |
+| `src/test_models.py`, `src/test_connection.py` | Model availability and connection checks |
+| `src/generate_synthetic_data.py` | Creates `data/*.csv` (synthetic, reproducible) |
+| `prompts/` | Versioned system prompts (`procurement_assistant_v1.2.0.md` is current), `prompt_history.md`, `archive/` |
+| `tests/` | Evaluation runners |
+| `data/` | Synthetic inventory, purchase history and supplier quotes |
+| `docs/` | Requirements, model selection, evaluation, weekly reports, AI Engineering Log, handoff |
+| `evidence/` | Evaluation outputs and model-call traces |
+
+## Models
+
+`gemini-3.8-flash` with automatic fallback to 3.7 → 3.6 → 3.5 → 3.5-lite → 3.1-lite Flash, configured in
+`.env`. Rationale: `docs/requirements/model-selection.md`.
+
+## Data and secrets
+
+All data is synthetic. Never commit `.env`; only `.env.example` (placeholders) is in git.
