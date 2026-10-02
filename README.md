@@ -18,9 +18,9 @@ synthetic CSV data.
 |:---:|:---|:---|
 | 1 | Problem framing, user stories, AI Boundary Matrix | Done (documents in `.docx`; to be copied into `docs/requirements/`) |
 | 2 | Model integration and prompting | Done — prompt v1.2.0, 10-case evaluation 9/10 (`docs/evaluation/week2-prompt-evaluation.md`) |
-| 3 | Context / RAG | Planned after Week 5 (team decision) |
+| 3 | Context / RAG | Next (done after Week 5 by team decision) |
 | 4 | Tools and function calling | Done — 4 deterministic tools, registry, human approval gate; offline 22/22, live 6/6 (`docs/evaluation/week4-tool-evaluation.md`) |
-| 5 | Bounded agent | Next (loop already in `src/tool_agent.py`) |
+| 5 | Bounded agent | Done — Weekly Restock Agent with task contract, explicit state, pre/post-conditions; 4 live traces incl. failure/recovery; offline 16/16 (`docs/evaluation/week5-agent-evaluation.md`) |
 | 6–8 | Memory, evaluation & guardrails, release | Not started |
 
 ## Setup (Windows PowerShell)
@@ -49,6 +49,12 @@ py src\approvals.py list                       # HUMAN approval gate (the AI can
 py src\approvals.py approve REQ-... --by "Your Name"
 py tests\test_week4_tools.py --offline         # 22 tool tests, no model quota used
 py tests\test_week4_tools.py --live            # 6 live agent tests
+
+# Week 5: bounded weekly restock agent
+py src\restock_agent.py --budget 300000 --user "Your Name"        # prints the Sense->...->Stop timeline
+py src\restock_agent.py --budget 300000 --save-trace my_run       # writes evidence\week5\trace_my_run.md
+py tests\test_week5_agent.py --offline        # 16 agent tests with a scripted fake model (no quota)
+py tests\test_week5_agent.py --live           # the 4 execution traces
 py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 ```
 
@@ -62,9 +68,10 @@ py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 | `src/tools/registry.py` | Week 4: allow-list, role permissions, argument validation, tool traces |
 | `src/tool_agent.py` | Week 4: bounded tool-calling loop (model decides, Python computes) |
 | `src/approvals.py` | Week 4: human-only approve/reject of drafts, with audit log |
+| `src/restock_agent.py` | Week 5: bounded goal-directed agent (weekly restock within a budget) |
 | `src/test_models.py`, `src/test_connection.py` | Model availability and connection checks |
 | `src/generate_synthetic_data.py` | Creates `data/*.csv` (synthetic, reproducible) |
-| `prompts/` | Versioned system prompts (`v2.0.0` tool mode, `v1.2.0` context mode), `prompt_history.md`, `archive/` |
+| `prompts/` | Versioned system prompts (`v2.2.1` tool mode, `v1.2.0` context mode), `prompt_history.md`, `archive/` |
 | `tests/` | Evaluation runners |
 | `data/` | Synthetic inventory, purchase history and supplier quotes; `data/drafts/` holds runtime drafts (git-ignored) |
 | `docs/` | Requirements, model selection, evaluation, weekly reports, AI Engineering Log, handoff |

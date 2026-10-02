@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-02 (end of Week 4 work; Week 3 deliberately deferred). Read this before changing anything.
+**Last updated:** 2026-10-03 (end of Week 5 work; Week 3 next). Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -12,7 +12,7 @@ This replaces an earlier handoff draft that contained outdated facts (listed in 
 - **AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS), GitHub AJmight. Other roles: TBD.
 - **AI tools used:** Gemini (product model + proof-reading), Claude Code (coding partner), DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline fixes).
 - **Code style rule:** comment every module, section and significant line (groupmates review the code).
-- Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → **Week 4 (done)** → Week 5 → Week 3 → 6–8.
+- Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → Week 4 → **Week 5 (done)** → Week 3 → 6–8.
 
 ## 2. Problem and boundaries
 
@@ -73,11 +73,26 @@ Chat sessions are used for multi-turn memory; they do not avoid 503s.
 | `src/tools/registry.py` | `execute_tool()`: allow-list → role (viewer/staff/owner) → argument validation → `created_by` injected → safe run → `evidence/week4/tool_traces.jsonl` |
 | `src/tool_agent.py` | `run_agent(question, role, user_name)`: bounded loop (6 turns, 12 tool calls), AFC off, role-filtered tools, fallback via `call_with_fallback`, run trace `evidence/week4/agent_traces.jsonl` |
 | `src/approvals.py` | Human-only approve/reject CLI with typed confirmation and `data/drafts/audit_log.jsonl`; NOT a tool |
-| `prompts/procurement_assistant_v2.0.0.md` | Tool-mode prompt (v1.2.0 stays for `ai_engine.py`) |
+| `prompts/procurement_assistant_v2.2.1.md` | Tool-mode prompt (v1.2.0 stays for `ai_engine.py`; v2.0.0–v2.2.0 in `archive/`) |
 | `tests/test_week4_tools.py` | 22 offline (no model) + 6 live tests |
 | `docs/requirements/tool-catalogue.md`, `tool-schemas.json`, `docs/architecture/architecture-week4.md`, `docs/evaluation/week4-tool-evaluation.md`, `docs/weekly-reports/week4-*.md` | Week 4 deliverables and trail |
 
 Results: offline 22/22, live 6/6. **F-04 closed.** New: F-07 (model requested a tool it was not given — blocked by the registry).
+
+## 6c. Week 5 (bounded agent) — what exists
+
+| File | Purpose |
+|:---|:---|
+| `src/restock_agent.py` | `run_restock(budget, user_name, role, save_trace_as)`: preconditions → SENSE (code) → bounded loop (5 turns, 6 tool calls, 3-tool task allow-list) → post-conditions → outcome decided by code (DRAFT_READY, NOTHING_FITS_BUDGET, NOTHING_TO_DO, PRECONDITION_FAILED, POSTCONDITION_FAILED, HANDOFF_*) |
+| `src/tools/procurement.py` `plan_within_budget` | Tool 5: urgency order (stock/reorder point), greedy skip-and-continue within budget; included / deferred / needs_human |
+| `src/tool_agent.py` v1.2.0 | + per-turn steps, repeated-call guard (one retry after SERVICE_UNAVAILABLE), `allowed_tools`, observer hook, `check_output()` against false draft claims |
+| `src/tools/registry.py` v1.1.0 | + whole-float → int, `minimum`, fault injection (`inject_fault`, `AGENT_FAULTS`, marked `injected`) |
+| `tests/test_week5_agent.py` | 16 offline (scripted fake model) + 4 live traces |
+| `docs/requirements/agent-task-contract.md`, `docs/architecture/architecture-week5.md`, `docs/evaluation/week5-agent-evaluation.md`, `docs/weekly-reports/week5-*.md`, `evidence/week5/trace_T1…T4.md` | Week 5 deliverables and trail |
+
+Results: offline 16/16 (+ Week 4 22/22), traces 4/4, Week 4 live regression 6/6 after F-13 fix.
+New findings: F-12 (±10 % range can exceed budget — open), F-13 (false draft claim — fixed in code + prompt),
+F-14 (prompt contradiction — fixed v2.2.1), F-15 (floats from Gemini — fixed).
 
 ## 7. Known issues
 
@@ -89,8 +104,8 @@ Results: offline 22/22, live 6/6. **F-04 closed.** New: F-07 (model requested a 
 ## 8. Next steps (priority order)
 
 1. ~~Week 4 tools~~ — done.
-2. Week 5: bounded agent loop (plan → act → observe → stop), max iterations, tool allow-list, human approval gate, 3 traces (one failure/recovery).
-3. Week 3: RAG over a small procurement-policy corpus with a source register and 15 questions.
+2. ~~Week 5~~ — done.
+3. **Week 3 (next):** RAG over a small procurement-policy corpus with a source register and 15 questions; expose policy retrieval to the agent as a read tool.
 4. Weeks 6–8 per the brief. Groq can be added as a cross-provider fallback in `llm_client.py`.
 
 ## 9. Corrections to the earlier handoff draft

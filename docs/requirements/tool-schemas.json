@@ -86,6 +86,35 @@
           "items"
         ]
       }
+    },
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "plan_within_budget",
+      "description": "Decide which low-stock items fit a budget, most urgent first (stock / reorder point). Returns 'included' items to draft, 'deferred' items that do not fit, and 'needs_human' items that cannot be costed (no purchase history or no quote). Writes nothing.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "An item ID such as ITM001, or the item's name such as 'Bic Pens (Blue)'."
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Items to consider, normally every low item ID."
+          },
+          "budget_ugx": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Spending limit in UGX. Omit if the user gave no budget."
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
     }
   ]
 }

@@ -28,9 +28,20 @@ LIMITS (bounded autonomy - the agent cannot run forever)
 --------------------------------------------------------
   AGENT_MAX_TURNS       max model calls in one run              (default 6)
   AGENT_MAX_TOOL_CALLS  max tool executions in one run          (default 12)
+  repeated-call guard   (Week 5) the same tool with the same arguments is blocked if it
+                        already succeeded; a retryable failure (SERVICE_UNAVAILABLE) may be
+                        retried exactly once
   model unavailable     every model in the fallback chain failed -> stop and tell the human
 Each stop has a named reason in the result: model_finished | iteration_limit |
 tool_call_limit | model_unavailable | empty_answer.
+
+OUTPUT CHECK (Week 5, failure F-13)
+-----------------------------------
+After the model's final answer, code checks it does not CLAIM a draft that does not
+exist (the "Status: DRAFT - AWAITING HUMAN APPROVAL" line, or a REQ-... ID that was not
+created in this run). If it does, the claim is corrected and the run is flagged in
+"output_warnings". This was added after a viewer (who cannot draft) was shown a
+draft-like summary built from read-only tools.
 
 TRACES
 ------
@@ -43,7 +54,7 @@ Usage (PowerShell, from the repo root):
   py src\\tool_agent.py "Draft a requisition for Bic Pens" --role staff --user "Arnold"
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.0.0 (Week 4)
+Version: 1.2.0 (Week 5: per-turn steps, repeated-call guard, observer hook, output check)
 """
 
 # ---------------------------------------------------------------------------
@@ -52,6 +63,7 @@ Version: 1.0.0 (Week 4)
 import argparse                               # command-line interface at the bottom
 import json                                   # write the agent trace
 import os                                     # read limits from .env
+import re                                     # output check: find draft IDs in the answer
 import time                                   # run latency
 import uuid                                   # unique ID per run (links agent + tool traces)
 from datetime import datetime, timezone       # trace timestamps
@@ -61,12 +73,12 @@ from google.genai import types                # SDK request/response types
 
 from ai_engine import load_system_prompt      # reads only the BEGIN/END part of a prompt file
 from llm_client import AllModelsFailedError, MODELS, call_with_fallback, client
-from tools.registry import execute_tool, tool_declarations_for
+from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations_for
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PROMPT_PATH = Path("prompts/procurement_assistant_v2.0.0.md")       # tool-mode prompt
+PROMPT_PATH = Path("prompts/procurement_assistant_v2.2.1.md")       # tool-mode prompt
 MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
 MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "12"))
 TRACE_PATH = Path("evidence/week4/agent_traces.jsonl")
@@ -81,6 +93,48 @@ HANDOFF_MESSAGES = {
                          "No action was taken. Please try again later.",
     "empty_answer": "The model returned no answer. No action was taken; please try again.",
 }
+
+
+def _call_key(name: str, args: dict) -> str:
+    """A stable text key for 'this tool with these arguments' (dict order does not matter)."""
+    return name + json.dumps(args, sort_keys=True, default=str)
+
+
+def _model_text(response) -> str:
+    """
+    Any normal text the model wrote in this turn (e.g. 'I will check the budget first').
+    Read from the parts directly: response.text warns when the turn also has tool calls.
+    Hidden 'thought' parts are skipped.
+    """
+    try:
+        parts = response.candidates[0].content.parts or []
+    except (AttributeError, IndexError, TypeError):
+        return ""
+    return "".join(p.text for p in parts if getattr(p, "text", None) and not getattr(p, "thought", False)).strip()
+
+
+DRAFT_ID_PATTERN = re.compile(r"REQ-\d{8}-\d{6}-[0-9A-F]{4}")
+DRAFT_CLAIM_TEXT = "AWAITING HUMAN APPROVAL"
+NO_DRAFT_NOTICE = ("\n\n**Note from the system:** no requisition was saved in this conversation. "
+                   "The figures above are information only and are NOT waiting for approval.")
+
+
+def check_output(final_text: str, drafts_created: list[str]) -> tuple[str, list[str]]:
+    """
+    Deterministic check of the model's final answer (does it claim a draft that does not exist?).
+    Returns (possibly corrected text, list of warnings). Used by run_agent; unit-tested offline.
+    """
+    warnings = []
+    unknown_ids = [i for i in DRAFT_ID_PATTERN.findall(final_text) if i not in drafts_created]
+    if unknown_ids:
+        warnings.append(f"answer mentions draft IDs not created in this run: {unknown_ids}")
+    if DRAFT_CLAIM_TEXT in final_text.upper() and not drafts_created:
+        warnings.append("answer claims a draft awaiting approval, but no draft was created")
+    if warnings:
+        # Remove the false status line and add a clear system notice.
+        final_text = re.sub(r"(?im)^.*status:\s*draft\s*-\s*awaiting human approval.*$", "", final_text).rstrip()
+        final_text += NO_DRAFT_NOTICE
+    return final_text, warnings
 
 
 def _write_trace(record: dict) -> None:
@@ -98,14 +152,22 @@ def _write_trace(record: dict) -> None:
 # ---------------------------------------------------------------------------
 def run_agent(user_message: str, role: str = "staff", user_name: str = "staff user",
               system_prompt: str | None = None, max_turns: int = MAX_TURNS,
-              max_tool_calls: int = MAX_TOOL_CALLS) -> dict:
+              max_tool_calls: int = MAX_TOOL_CALLS, on_tool_result=None,
+              trace_label: str = "tool_agent", allowed_tools: set[str] | None = None) -> dict:
     """
     Answer one user message, letting the model call tools, within strict limits.
 
     user_message  the question/request typed by the user
     role          viewer | staff | owner  (decides which tools the model may use)
     user_name     recorded as created_by on drafts (taken from the session, not the model)
-    Returns a dict: run_id, final_text, stopped_reason, turns_used, tool_calls,
+    on_tool_result  optional function(name, args, result, status, turn, model, model_text)
+                  called after every tool call; the Week 5 restock agent uses it to update
+                  its explicit state and build its trace timeline
+    allowed_tools optional TASK allow-list (Week 5). Only these tools are shown to the model,
+                  and any other tool request is blocked with NOT_IN_TASK_CONTRACT, even if the
+                  user's role would normally allow it
+    trace_label   written into the run trace so different agents can be told apart
+    Returns a dict: run_id, final_text, stopped_reason, turns_used, steps, tool_calls,
                     models_used, drafts_created, latency_s
     """
     run_id = uuid.uuid4().hex[:8]                       # short ID to find this run in the traces
@@ -113,7 +175,8 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
     system_prompt = system_prompt or load_system_prompt(PROMPT_PATH)
 
     # The tools this role may use, converted into the SDK's declaration objects.
-    declarations = [types.FunctionDeclaration(**d) for d in tool_declarations_for(role)]
+    declarations = [types.FunctionDeclaration(**d) for d in tool_declarations_for(role)
+                    if allowed_tools is None or d["name"] in allowed_tools]
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
         temperature=0.1,
@@ -128,6 +191,8 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part(text=user_message)])]
 
     tool_calls: list[dict] = []          # everything executed, for the result and the trace
+    steps: list[dict] = []               # one entry per model turn: what it said and asked for
+    call_history: dict[str, list[dict]] = {}   # results so far per (tool, args) - repeated-call guard
     models_used: list[str] = []          # which model answered each turn
     unusable: set[str] = set()           # models out of quota during THIS run
     final_text, stopped_reason, turn = "", "iteration_limit", 0
@@ -147,6 +212,8 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
         models_used.append(model)
 
         calls = response.function_calls or []        # the tool requests in this turn (may be empty)
+        steps.append({"turn": turn, "model": model, "model_text": _model_text(response),
+                      "tool_requests": [{"name": c.name, "args": dict(c.args or {})} for c in calls]})
         if not calls:
             # No tool requested -> the model has written its answer.
             final_text = (response.text or "").strip()
@@ -159,13 +226,29 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
 
         result_parts = []
         for call in calls:
-            if len(tool_calls) >= max_tool_calls:
+            args = dict(call.args or {})
+            key = _call_key(call.name, args)
+            previous = call_history.get(key, [])
+            retry_allowed = (len(previous) == 1 and
+                             str(previous[0].get("error", "")).startswith(RETRYABLE_ERRORS))
+            if allowed_tools is not None and call.name not in allowed_tools:
+                # Outside this task's contract (checked before the registry's role check).
+                result, status = {"error": f"NOT_IN_TASK_CONTRACT: {call.name} is not allowed "
+                                           f"for this task"}, "blocked"
+            elif len(tool_calls) >= max_tool_calls:
                 # Over budget: refuse to run more tools and tell the model why.
                 result, status = {"error": "LIMIT: tool call budget for this request is used up"}, "blocked"
+            elif previous and not retry_allowed:
+                # Same tool, same arguments again: it would only waste budget (or loop forever).
+                result, status = {"error": "REPEATED_CALL: you already called this tool with these "
+                                           "arguments; use the earlier result"}, "blocked"
             else:
-                result, status = execute_tool(call.name, call.args, role,
+                result, status = execute_tool(call.name, args, role,
                                               context={"created_by": user_name}, run_id=run_id)
-            tool_calls.append({"turn": turn, "name": call.name, "args": dict(call.args or {}),
+                call_history.setdefault(key, []).append(result)
+            if on_tool_result:
+                on_tool_result(call.name, args, result, status, turn, model, steps[-1]["model_text"])
+            tool_calls.append({"turn": turn, "name": call.name, "args": args,
                                "status": status, "result": result})
             # Send the result back, matched to the request by id and name.
             result_parts.append(types.Part(function_response=types.FunctionResponse(
@@ -182,18 +265,23 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
 
     drafts = [c["result"]["draft_id"] for c in tool_calls
               if c["name"] == "draft_requisition" and c["result"].get("draft_id")]
+
+    # Output check: never let the answer claim a draft that does not exist (F-13).
+    final_text, output_warnings = check_output(final_text, drafts)
     result = {
         "run_id": run_id,
         "final_text": final_text,
         "stopped_reason": stopped_reason,
         "turns_used": turn,
+        "steps": steps,
         "tool_calls": tool_calls,
         "models_used": models_used,
         "drafts_created": drafts,
+        "output_warnings": output_warnings,
         "latency_s": round(time.monotonic() - started, 2),
     }
     _write_trace({"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                  "user_message": user_message, "role": role, "user_name": user_name,
+                  "agent": trace_label, "user_message": user_message, "role": role, "user_name": user_name,
                   "limits": {"max_turns": max_turns, "max_tool_calls": max_tool_calls}, **result})
     return result
 

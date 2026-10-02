@@ -2,11 +2,11 @@
 
 | Field | Value |
 |:---|:---|
-| **Version** | 1.0 (Week 4) |
+| **Version** | 1.1 (Week 5: tool 5 `plan_within_budget`, task allow-list, repeat guard, output check) |
 | **Owner** | Mwesigwa Arnold Mugahi (AI Engineering Lead) |
 | **Code** | `src/tools/procurement.py` (functions), `src/tools/registry.py` (allow-list, permissions, executor) |
 | **Machine-readable schemas** | `docs/requirements/tool-schemas.json` (exported from the code) |
-| **Tests** | `tests/test_week4_tools.py` — 22 offline + 6 live cases |
+| **Tests** | `tests/test_week4_tools.py` (22 offline + 6 live), `tests/test_week5_agent.py` (16 offline + 4 live traces) |
 
 ## How a tool call works
 
@@ -19,9 +19,9 @@
 
 | Role | Permissions | Tools shown to the model |
 |:---|:---|:---|
-| `viewer` | read | `get_low_stock`, `compare_supplier_quotes`, `estimate_reorder_quantity` |
-| `staff` | read, draft | all four |
-| `owner` | read, draft | all four |
+| `viewer` | read | `get_low_stock`, `compare_supplier_quotes`, `estimate_reorder_quantity`, `plan_within_budget` |
+| `staff` | read, draft | all five |
+| `owner` | read, draft | all five |
 | any other | none | none |
 
 **No role can approve, order or pay through the AI**: those tools do not exist. Approval is a human
@@ -75,6 +75,17 @@ action in `src/approvals.py` (see the end of this document).
 
 Covers User Stories 2, 4, 5 (unique ID, date, creator), 7 (reasoning trail), 8 (budget range), 12 (200 % cap flag).
 
+## Tool 5 — `plan_within_budget` (Week 5)
+
+| Field | Value |
+|:---|:---|
+| **Purpose** | Decide which low items fit a budget, most urgent first |
+| **Input** | `items: array of string` (1–50), `budget_ugx: integer ≥ 1` (optional; whole floats like `300000.0` are converted, `2.5` rejected) |
+| **Output** | `{"budget_ugx", "planned_total_ugx", "remaining_budget_ugx", "all_priced_items_fit", "included": [{item_id, item_name, recommended_qty, selected_supplier, cost_ugx, urgency, requires_override}], "deferred": [... + reason], "needs_human": [{item_id, item_name, reason}], "not_low": [...], "rule"}` |
+| **Rules** | costs as in `draft_requisition`; urgency = stock / reorder point (lower first); greedy skip-and-continue within the budget; no-history or no-quote items → `needs_human` |
+| **Permission / side effects** | read / none |
+| **Used by** | the Weekly Restock Agent (`src/restock_agent.py`) before drafting |
+
 ## Executor errors (from `registry.execute_tool`)
 
 | Code | When | Status in trace |
@@ -86,6 +97,12 @@ Covers User Stories 2, 4, 5 (unique ID, date, creator), 7 (reasoning trail), 8 (
 | `TOOL_ERROR` | the Python function crashed | crashed |
 | `UNEXPECTED_RESPONSE` | the function returned something other than a dict | crashed |
 | `LIMIT` | the run's tool-call budget (`AGENT_MAX_TOOL_CALLS`) is used up | blocked |
+| `NOT_IN_TASK_CONTRACT` | (Week 5, `tool_agent`) tool not in the current task's allow-list | blocked |
+| `REPEATED_CALL` | (Week 5, `tool_agent`) same tool + same arguments again; one retry allowed only after `SERVICE_UNAVAILABLE` | blocked |
+| `SERVICE_UNAVAILABLE` | temporary failure (used by fault injection for testing; marked `injected: true`) | tool_error |
+
+**Output check (Week 5):** after every agent answer, `tool_agent.check_output()` removes any claim of a
+draft or draft ID that was not created in that run and adds a system notice (failure F-13).
 
 ## Human approval gate — `src/approvals.py` (not a tool)
 

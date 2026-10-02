@@ -20,6 +20,8 @@ THE FOUR TOOLS
   4. draft_requisition(items)            -> builds a DRAFT requisition, saves it to
                                             data/drafts/ (the only "side effect"),
                                             status always "DRAFT - AWAITING HUMAN APPROVAL"
+  5. plan_within_budget(items, budget)   -> (Week 5) which low items fit a budget, most urgent
+                                            first; the rest are "deferred" or "needs_human"
 
 There is deliberately NO approve / order / pay tool. Approval is done by a
 human with src/approvals.py, which the model cannot reach.
@@ -43,7 +45,7 @@ The business rules here are the same ones written in prompts/procurement_assista
 (Section 4); the prompt v2.0.0 now tells the model to use these tools instead.
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.0.0 (Week 4)
+Version: 1.1.0 (Week 5: plan_within_budget)
 """
 
 # ---------------------------------------------------------------------------
@@ -432,3 +434,90 @@ def draft_requisition(items: list[str], created_by: str = "unknown") -> dict:
     path = DRAFTS_DIR / f"{draft_id}.json"
     path.write_text(json.dumps(record, indent=2), encoding="utf-8")
     return {**record, "saved_to": path.as_posix()}
+
+
+# ---------------------------------------------------------------------------
+# Tool 5: plan_within_budget  (Week 5 - used by the restock agent to decide/re-plan)
+# ---------------------------------------------------------------------------
+@_returns_errors_as_results
+def plan_within_budget(items: list[str], budget_ugx: int | None = None) -> dict:
+    """
+    Decide which low items fit a budget, most urgent first. Read-only (no file is written).
+
+    items       item IDs or names to consider (normally every low item from get_low_stock)
+    budget_ugx  spending limit in UGX; None means "no limit"
+
+    How it decides (all deterministic, so a reviewer can predict the answer):
+      1. Each item is costed exactly like draft_requisition would (quantity x cheapest price).
+      2. Items that are not low are dropped ("not_low"); items with no purchase history have
+         quantity 0, so they cannot be costed and go to "needs_human".
+      3. The rest are sorted by URGENCY = current_stock / reorder_point (smaller = more urgent;
+         e.g. Rulers 2/15 = 0.13 comes before Bic Pens 5/20 = 0.25). Ties -> item_id.
+      4. Walk the sorted list adding each item if it still fits the remaining budget. An item
+         that does not fit is "deferred", and we KEEP going, so a cheaper, less urgent item can
+         still use the money left (a simple greedy "skip and continue" rule).
+    Returns included / deferred / needs_human / not_low lists and the totals.
+    The agent then drafts ONLY the included items, and tells the human about the rest.
+    """
+    if not isinstance(items, list) or not items:
+        raise ToolError("INVALID_PARAMETER", "items must be a non-empty list of item IDs or names")
+    if budget_ugx is not None and (not isinstance(budget_ugx, int) or budget_ugx <= 0):
+        raise ToolError("INVALID_PARAMETER", "budget_ugx must be a positive whole number of UGX")
+
+    inventory = _read_csv("current_stock.csv")
+    quote_rows = _read_csv("supplier_quotes.csv")
+    history_rows = _read_csv("past_purchases.csv")
+
+    candidates, needs_human, not_low, seen = [], [], [], set()
+    for ref in items:
+        row = _resolve_item(ref, inventory)
+        if row["item_id"] in seen:                     # ignore duplicates
+            continue
+        seen.add(row["item_id"])
+        quotes = _quotes_for(row["item_id"], quote_rows)
+        best = quotes[0] if quotes else None
+        calc = _reorder_calculation(row, _history_for(row["item_id"], history_rows), best)
+        if not calc["is_low"]:
+            not_low.append({"item_id": calc["item_id"], "item_name": calc["item_name"],
+                            "reason": calc["basis"]})
+            continue
+        if calc["recommended_qty"] == 0 or best is None:
+            # Cannot be costed: no history (human must set qty) or no quote (quote required).
+            needs_human.append({"item_id": calc["item_id"], "item_name": calc["item_name"],
+                                "reason": calc["basis"] if best else "No supplier quote - quote required"})
+            continue
+        candidates.append({
+            "item_id": calc["item_id"],
+            "item_name": calc["item_name"],
+            "recommended_qty": calc["recommended_qty"],
+            "selected_supplier": best["supplier_name"],
+            "cost_ugx": calc["recommended_qty"] * best["unit_price_ugx"],
+            # Fraction keeps the ratio exact for sorting; rounded copy is for display.
+            "_urgency": Fraction(calc["current_stock"], calc["reorder_point"]) if calc["reorder_point"] else Fraction(0),
+            "requires_override": calc["requires_override"],
+        })
+
+    candidates.sort(key=lambda c: (c["_urgency"], c["item_id"]))   # most urgent first
+
+    included, deferred, running = [], [], 0
+    for c in candidates:
+        c["urgency"] = round(float(c.pop("_urgency")), 3)            # e.g. 0.133
+        if budget_ugx is None or running + c["cost_ugx"] <= budget_ugx:
+            running += c["cost_ugx"]
+            included.append(c)
+        else:
+            deferred.append({**c, "reason": (f"would exceed budget: UGX {running:,} already planned + "
+                                             f"UGX {c['cost_ugx']:,} > UGX {budget_ugx:,}")})
+
+    return {
+        "budget_ugx": budget_ugx,
+        "planned_total_ugx": running,
+        "remaining_budget_ugx": (budget_ugx - running) if budget_ugx is not None else None,
+        "all_priced_items_fit": not deferred,
+        "included": included,           # draft exactly these
+        "deferred": deferred,           # tell the human: did not fit the budget
+        "needs_human": needs_human,     # tell the human: cannot be costed automatically
+        "not_low": not_low,
+        "rule": "most urgent first (stock/reorder_point), skip items that do not fit and continue",
+        "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
+    }

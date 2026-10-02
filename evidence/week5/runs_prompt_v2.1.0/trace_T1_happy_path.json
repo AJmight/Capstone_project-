@@ -1,0 +1,704 @@
+{
+  "timestamp": "2026-10-02T23:12:32+00:00",
+  "trace_name": "T1_happy_path",
+  "outcome": "DRAFT_READY",
+  "final_text": "### Weekly Restock Plan Summary\n\n- **Draft:**\n  - **Draft ID:** `REQ-20261002-231219-7FED` (source: `draft_requisition`)\n  - **Requisition Lines:**\n    - **Rulers 30cm** (ITM003): 57 units @ UGX 938 \u2014 **UGX 53,466** (Supplier: Kampala Office Supplies)\n    - **Bic Pens (Blue)** (ITM001): 65 units @ UGX 476 \u2014 **UGX 30,940** (Supplier: Kampala Office Supplies)\n    - **Erasers** (ITM005): 63 units @ UGX 188 \u2014 **UGX 11,844** (Supplier: Kampala Office Supplies)\n    - **Stapler Medium** (ITM007): 88 units @ UGX 8,215 \u2014 **UGX 722,920** (Supplier: Kampala Office Supplies)\n    - **Files (Box)** (ITM009): 60 units @ UGX 3,298 \u2014 **UGX 197,880** (Supplier: Kampala Office Supplies)\n    - **A4 Printing Paper (Rim)** (ITM006): 53 units @ UGX 11,363 \u2014 **UGX 602,239** (Supplier: Kampala Office Supplies)\n  - **Total Cost vs Budget:** **UGX 1,619,289** allocated out of **UGX 2,000,000** budget (Remaining: UGX 380,711) (source: `plan_within_budget`, `draft_requisition`).\n\n- **Deferred (did not fit the budget):**\n  - None. All priced low-stock items fit within the specified budget (source: `plan_within_budget`).\n\n- **Needs your decision:**\n  - **Cellotape (Roll)** (ITM011): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n  - **Glue Stick** (ITM012): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n  - **Marker Pens (Black)** (ITM013): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n  - **Calculator (Basic)** (ITM015): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n\nStatus: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it.",
+  "state": {
+    "goal": "Prepare ONE draft restock requisition within the budget and report everything that needs a human decision.",
+    "budget_ugx": 2000000,
+    "role": "staff",
+    "user_name": "Mwesigwa Arnold Mugahi",
+    "phase": "STOP",
+    "low_items": [
+      {
+        "item_id": "ITM001",
+        "item_name": "Bic Pens (Blue)",
+        "current_stock": 5,
+        "reorder_point": 20
+      },
+      {
+        "item_id": "ITM003",
+        "item_name": "Rulers 30cm",
+        "current_stock": 2,
+        "reorder_point": 15
+      },
+      {
+        "item_id": "ITM005",
+        "item_name": "Erasers",
+        "current_stock": 8,
+        "reorder_point": 20
+      },
+      {
+        "item_id": "ITM006",
+        "item_name": "A4 Printing Paper (Rim)",
+        "current_stock": 12,
+        "reorder_point": 15
+      },
+      {
+        "item_id": "ITM007",
+        "item_name": "Stapler Medium",
+        "current_stock": 3,
+        "reorder_point": 5
+      },
+      {
+        "item_id": "ITM009",
+        "item_name": "Files (Box)",
+        "current_stock": 6,
+        "reorder_point": 10
+      },
+      {
+        "item_id": "ITM011",
+        "item_name": "Cellotape (Roll)",
+        "current_stock": 4,
+        "reorder_point": 10
+      },
+      {
+        "item_id": "ITM012",
+        "item_name": "Glue Stick",
+        "current_stock": 18,
+        "reorder_point": 20
+      },
+      {
+        "item_id": "ITM013",
+        "item_name": "Marker Pens (Black)",
+        "current_stock": 7,
+        "reorder_point": 15
+      },
+      {
+        "item_id": "ITM015",
+        "item_name": "Calculator (Basic)",
+        "current_stock": 2,
+        "reorder_point": 5
+      }
+    ],
+    "plan": {
+      "budget_ugx": 2000000,
+      "planned_total_ugx": 1619289,
+      "remaining_budget_ugx": 380711,
+      "all_priced_items_fit": true,
+      "included": [
+        {
+          "item_id": "ITM003",
+          "item_name": "Rulers 30cm",
+          "recommended_qty": 57,
+          "selected_supplier": "Kampala Office Supplies",
+          "cost_ugx": 53466,
+          "requires_override": false,
+          "urgency": 0.133
+        },
+        {
+          "item_id": "ITM001",
+          "item_name": "Bic Pens (Blue)",
+          "recommended_qty": 65,
+          "selected_supplier": "Kampala Office Supplies",
+          "cost_ugx": 30940,
+          "requires_override": false,
+          "urgency": 0.25
+        },
+        {
+          "item_id": "ITM005",
+          "item_name": "Erasers",
+          "recommended_qty": 63,
+          "selected_supplier": "Kampala Office Supplies",
+          "cost_ugx": 11844,
+          "requires_override": false,
+          "urgency": 0.4
+        },
+        {
+          "item_id": "ITM007",
+          "item_name": "Stapler Medium",
+          "recommended_qty": 88,
+          "selected_supplier": "Kampala Office Supplies",
+          "cost_ugx": 722920,
+          "requires_override": false,
+          "urgency": 0.6
+        },
+        {
+          "item_id": "ITM009",
+          "item_name": "Files (Box)",
+          "recommended_qty": 60,
+          "selected_supplier": "Kampala Office Supplies",
+          "cost_ugx": 197880,
+          "requires_override": false,
+          "urgency": 0.6
+        },
+        {
+          "item_id": "ITM006",
+          "item_name": "A4 Printing Paper (Rim)",
+          "recommended_qty": 53,
+          "selected_supplier": "Kampala Office Supplies",
+          "cost_ugx": 602239,
+          "requires_override": false,
+          "urgency": 0.8
+        }
+      ],
+      "deferred": [],
+      "needs_human": [
+        {
+          "item_id": "ITM011",
+          "item_name": "Cellotape (Roll)",
+          "reason": "No purchase history - human must set quantity"
+        },
+        {
+          "item_id": "ITM012",
+          "item_name": "Glue Stick",
+          "reason": "No purchase history - human must set quantity"
+        },
+        {
+          "item_id": "ITM013",
+          "item_name": "Marker Pens (Black)",
+          "reason": "No purchase history - human must set quantity"
+        },
+        {
+          "item_id": "ITM015",
+          "item_name": "Calculator (Basic)",
+          "reason": "No purchase history - human must set quantity"
+        }
+      ],
+      "not_low": [],
+      "rule": "most urgent first (stock/reorder_point), skip items that do not fit and continue",
+      "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv"
+    },
+    "draft": {
+      "draft_id": "REQ-20261002-231219-7FED",
+      "created_at": "2026-10-02T23:12:19+00:00",
+      "created_by": "Mwesigwa Arnold Mugahi",
+      "status": "DRAFT - AWAITING HUMAN APPROVAL",
+      "lines": [
+        {
+          "item_id": "ITM003",
+          "item_name": "Rulers 30cm",
+          "current_stock": 2,
+          "reorder_point": 15,
+          "recommended_qty": 57,
+          "quantity_basis": "469 purchased over 12 months = 39.08/month; 39.08 x 1.5 = 58.625; minus stock 2 = 56.625; rounded up to 57",
+          "selected_supplier": "Kampala Office Supplies",
+          "unit_price_ugx": 938,
+          "min_order_qty": 20,
+          "lead_time_days": 3,
+          "total_cost_ugx": 53466,
+          "requires_override": false,
+          "override_reason": ""
+        },
+        {
+          "item_id": "ITM001",
+          "item_name": "Bic Pens (Blue)",
+          "current_stock": 5,
+          "reorder_point": 20,
+          "recommended_qty": 65,
+          "quantity_basis": "555 purchased over 12 months = 46.25/month; 46.25 x 1.5 = 69.375; minus stock 5 = 64.375; rounded up to 65",
+          "selected_supplier": "Kampala Office Supplies",
+          "unit_price_ugx": 476,
+          "min_order_qty": 20,
+          "lead_time_days": 3,
+          "total_cost_ugx": 30940,
+          "requires_override": false,
+          "override_reason": ""
+        },
+        {
+          "item_id": "ITM005",
+          "item_name": "Erasers",
+          "current_stock": 8,
+          "reorder_point": 20,
+          "recommended_qty": 63,
+          "quantity_basis": "567 purchased over 12 months = 47.25/month; 47.25 x 1.5 = 70.875; minus stock 8 = 62.875; rounded up to 63",
+          "selected_supplier": "Kampala Office Supplies",
+          "unit_price_ugx": 188,
+          "min_order_qty": 20,
+          "lead_time_days": 3,
+          "total_cost_ugx": 11844,
+          "requires_override": false,
+          "override_reason": ""
+        },
+        {
+          "item_id": "ITM007",
+          "item_name": "Stapler Medium",
+          "current_stock": 3,
+          "reorder_point": 5,
+          "recommended_qty": 88,
+          "quantity_basis": "725 purchased over 12 months = 60.42/month; 60.42 x 1.5 = 90.625; minus stock 3 = 87.625; rounded up to 88",
+          "selected_supplier": "Kampala Office Supplies",
+          "unit_price_ugx": 8215,
+          "min_order_qty": 20,
+          "lead_time_days": 3,
+          "total_cost_ugx": 722920,
+          "requires_override": false,
+          "override_reason": ""
+        },
+        {
+          "item_id": "ITM009",
+          "item_name": "Files (Box)",
+          "current_stock": 6,
+          "reorder_point": 10,
+          "recommended_qty": 60,
+          "quantity_basis": "525 purchased over 12 months = 43.75/month; 43.75 x 1.5 = 65.625; minus stock 6 = 59.625; rounded up to 60",
+          "selected_supplier": "Kampala Office Supplies",
+          "unit_price_ugx": 3298,
+          "min_order_qty": 20,
+          "lead_time_days": 3,
+          "total_cost_ugx": 197880,
+          "requires_override": false,
+          "override_reason": ""
+        },
+        {
+          "item_id": "ITM006",
+          "item_name": "A4 Printing Paper (Rim)",
+          "current_stock": 12,
+          "reorder_point": 15,
+          "recommended_qty": 53,
+          "quantity_basis": "520 purchased over 12 months = 43.33/month; 43.33 x 1.5 = 65.000; minus stock 12 = 53.000; rounded up to 53",
+          "selected_supplier": "Kampala Office Supplies",
+          "unit_price_ugx": 11363,
+          "min_order_qty": 20,
+          "lead_time_days": 3,
+          "total_cost_ugx": 602239,
+          "requires_override": false,
+          "override_reason": ""
+        }
+      ],
+      "skipped": [],
+      "estimated_budget_ugx": 1619289,
+      "budget_range_ugx": {
+        "low": 1457360,
+        "high": 1781218
+      },
+      "requires_override_any": false,
+      "decision": null,
+      "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
+      "saved_to": "data/drafts/REQ-20261002-231219-7FED.json"
+    },
+    "drafts_created": [
+      "REQ-20261002-231219-7FED"
+    ],
+    "failures": [],
+    "recoveries": [],
+    "timeline": [
+      {
+        "t": "23:12:12",
+        "phase": "PRECONDITIONS",
+        "detail": "ok"
+      },
+      {
+        "t": "23:12:12",
+        "phase": "SENSE",
+        "detail": "10 low items: ['ITM001', 'ITM003', 'ITM005', 'ITM006', 'ITM007', 'ITM009', 'ITM011', 'ITM012', 'ITM013', 'ITM015']"
+      },
+      {
+        "t": "23:12:16",
+        "phase": "PLAN/DECIDE",
+        "detail": "turn 1 (gemini-3.8-flash) chose plan_within_budget"
+      },
+      {
+        "t": "23:12:16",
+        "phase": "ACT",
+        "detail": "plan_within_budget(items=[ITM001, ITM003, ITM005, ITM006, ITM007, ITM009, ITM011, ITM012, ITM013, ITM015], budget_ugx=2000000) -> ok"
+      },
+      {
+        "t": "23:12:16",
+        "phase": "OBSERVE",
+        "detail": "plan: include ['ITM003', 'ITM001', 'ITM005', 'ITM007', 'ITM009', 'ITM006'] = UGX 1,619,289 of UGX 2,000,000; deferred []; needs human ['ITM011', 'ITM012', 'ITM013', 'ITM015']"
+      },
+      {
+        "t": "23:12:19",
+        "phase": "PLAN/DECIDE",
+        "detail": "turn 2 (gemini-3.8-flash) chose draft_requisition"
+      },
+      {
+        "t": "23:12:19",
+        "phase": "ACT",
+        "detail": "draft_requisition(items=[ITM003, ITM001, ITM005, ITM007, ITM009, ITM006]) -> ok"
+      },
+      {
+        "t": "23:12:19",
+        "phase": "OBSERVE",
+        "detail": "draft REQ-20261002-231219-7FED with ['ITM003', 'ITM001', 'ITM005', 'ITM007', 'ITM009', 'ITM006'] = UGX 1,619,289, status DRAFT - AWAITING HUMAN APPROVAL"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "PLAN/DECIDE",
+        "detail": "turn 3 (gemini-3.6-flash) wrote the final summary (no more tools)"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "POSTCONDITION",
+        "detail": "PASS - at most one draft per run: drafts: ['REQ-20261002-231219-7FED']"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "POSTCONDITION",
+        "detail": "PASS - plan made before drafting: plan_within_budget succeeded first"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "POSTCONDITION",
+        "detail": "PASS - draft items == plan 'included' items: draft ['ITM001', 'ITM003', 'ITM005', 'ITM006', 'ITM007', 'ITM009'] vs plan ['ITM001', 'ITM003', 'ITM005', 'ITM006', 'ITM007', 'ITM009']"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "POSTCONDITION",
+        "detail": "PASS - draft total within budget: UGX 1,619,289 <= UGX 2,000,000"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "POSTCONDITION",
+        "detail": "PASS - draft status is DRAFT: DRAFT - AWAITING HUMAN APPROVAL"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "POSTCONDITION",
+        "detail": "PASS - summary says it awaits human approval: status line present"
+      },
+      {
+        "t": "23:12:32",
+        "phase": "STOP",
+        "detail": "outcome DRAFT_READY (loop stop reason: model_finished)"
+      }
+    ],
+    "postconditions": [
+      {
+        "check": "at most one draft per run",
+        "passed": true,
+        "detail": "drafts: ['REQ-20261002-231219-7FED']"
+      },
+      {
+        "check": "plan made before drafting",
+        "passed": true,
+        "detail": "plan_within_budget succeeded first"
+      },
+      {
+        "check": "draft items == plan 'included' items",
+        "passed": true,
+        "detail": "draft ['ITM001', 'ITM003', 'ITM005', 'ITM006', 'ITM007', 'ITM009'] vs plan ['ITM001', 'ITM003', 'ITM005', 'ITM006', 'ITM007', 'ITM009']"
+      },
+      {
+        "check": "draft total within budget",
+        "passed": true,
+        "detail": "UGX 1,619,289 <= UGX 2,000,000"
+      },
+      {
+        "check": "draft status is DRAFT",
+        "passed": true,
+        "detail": "DRAFT - AWAITING HUMAN APPROVAL"
+      },
+      {
+        "check": "summary says it awaits human approval",
+        "passed": true,
+        "detail": "status line present"
+      }
+    ],
+    "handoffs": [
+      "ITM011 Cellotape (Roll): No purchase history - human must set quantity",
+      "ITM012 Glue Stick: No purchase history - human must set quantity",
+      "ITM013 Marker Pens (Black): No purchase history - human must set quantity",
+      "ITM015 Calculator (Basic): No purchase history - human must set quantity",
+      "Approve or reject REQ-20261002-231219-7FED with src/approvals.py"
+    ],
+    "outcome": "DRAFT_READY"
+  },
+  "loop": {
+    "run_id": "bdc106bd",
+    "stopped_reason": "model_finished",
+    "turns_used": 3,
+    "models_used": [
+      "gemini-3.8-flash",
+      "gemini-3.8-flash",
+      "gemini-3.6-flash"
+    ],
+    "latency_s": 19.91,
+    "steps": [
+      {
+        "turn": 1,
+        "model": "gemini-3.8-flash",
+        "model_text": "",
+        "tool_requests": [
+          {
+            "name": "plan_within_budget",
+            "args": {
+              "items": [
+                "ITM001",
+                "ITM003",
+                "ITM005",
+                "ITM006",
+                "ITM007",
+                "ITM009",
+                "ITM011",
+                "ITM012",
+                "ITM013",
+                "ITM015"
+              ],
+              "budget_ugx": 2000000
+            }
+          }
+        ]
+      },
+      {
+        "turn": 2,
+        "model": "gemini-3.8-flash",
+        "model_text": "",
+        "tool_requests": [
+          {
+            "name": "draft_requisition",
+            "args": {
+              "items": [
+                "ITM003",
+                "ITM001",
+                "ITM005",
+                "ITM007",
+                "ITM009",
+                "ITM006"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "turn": 3,
+        "model": "gemini-3.6-flash",
+        "model_text": "### Weekly Restock Plan Summary\n\n- **Draft:**\n  - **Draft ID:** `REQ-20261002-231219-7FED` (source: `draft_requisition`)\n  - **Requisition Lines:**\n    - **Rulers 30cm** (ITM003): 57 units @ UGX 938 \u2014 **UGX 53,466** (Supplier: Kampala Office Supplies)\n    - **Bic Pens (Blue)** (ITM001): 65 units @ UGX 476 \u2014 **UGX 30,940** (Supplier: Kampala Office Supplies)\n    - **Erasers** (ITM005): 63 units @ UGX 188 \u2014 **UGX 11,844** (Supplier: Kampala Office Supplies)\n    - **Stapler Medium** (ITM007): 88 units @ UGX 8,215 \u2014 **UGX 722,920** (Supplier: Kampala Office Supplies)\n    - **Files (Box)** (ITM009): 60 units @ UGX 3,298 \u2014 **UGX 197,880** (Supplier: Kampala Office Supplies)\n    - **A4 Printing Paper (Rim)** (ITM006): 53 units @ UGX 11,363 \u2014 **UGX 602,239** (Supplier: Kampala Office Supplies)\n  - **Total Cost vs Budget:** **UGX 1,619,289** allocated out of **UGX 2,000,000** budget (Remaining: UGX 380,711) (source: `plan_within_budget`, `draft_requisition`).\n\n- **Deferred (did not fit the budget):**\n  - None. All priced low-stock items fit within the specified budget (source: `plan_within_budget`).\n\n- **Needs your decision:**\n  - **Cellotape (Roll)** (ITM011): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n  - **Glue Stick** (ITM012): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n  - **Marker Pens (Black)** (ITM013): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n  - **Calculator (Basic)** (ITM015): No purchase history \u2014 human must set quantity (source: `plan_within_budget`).\n\nStatus: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it.",
+        "tool_requests": []
+      }
+    ],
+    "tool_calls": [
+      {
+        "turn": 1,
+        "name": "plan_within_budget",
+        "args": {
+          "items": [
+            "ITM001",
+            "ITM003",
+            "ITM005",
+            "ITM006",
+            "ITM007",
+            "ITM009",
+            "ITM011",
+            "ITM012",
+            "ITM013",
+            "ITM015"
+          ],
+          "budget_ugx": 2000000
+        },
+        "status": "ok",
+        "result": {
+          "budget_ugx": 2000000,
+          "planned_total_ugx": 1619289,
+          "remaining_budget_ugx": 380711,
+          "all_priced_items_fit": true,
+          "included": [
+            {
+              "item_id": "ITM003",
+              "item_name": "Rulers 30cm",
+              "recommended_qty": 57,
+              "selected_supplier": "Kampala Office Supplies",
+              "cost_ugx": 53466,
+              "requires_override": false,
+              "urgency": 0.133
+            },
+            {
+              "item_id": "ITM001",
+              "item_name": "Bic Pens (Blue)",
+              "recommended_qty": 65,
+              "selected_supplier": "Kampala Office Supplies",
+              "cost_ugx": 30940,
+              "requires_override": false,
+              "urgency": 0.25
+            },
+            {
+              "item_id": "ITM005",
+              "item_name": "Erasers",
+              "recommended_qty": 63,
+              "selected_supplier": "Kampala Office Supplies",
+              "cost_ugx": 11844,
+              "requires_override": false,
+              "urgency": 0.4
+            },
+            {
+              "item_id": "ITM007",
+              "item_name": "Stapler Medium",
+              "recommended_qty": 88,
+              "selected_supplier": "Kampala Office Supplies",
+              "cost_ugx": 722920,
+              "requires_override": false,
+              "urgency": 0.6
+            },
+            {
+              "item_id": "ITM009",
+              "item_name": "Files (Box)",
+              "recommended_qty": 60,
+              "selected_supplier": "Kampala Office Supplies",
+              "cost_ugx": 197880,
+              "requires_override": false,
+              "urgency": 0.6
+            },
+            {
+              "item_id": "ITM006",
+              "item_name": "A4 Printing Paper (Rim)",
+              "recommended_qty": 53,
+              "selected_supplier": "Kampala Office Supplies",
+              "cost_ugx": 602239,
+              "requires_override": false,
+              "urgency": 0.8
+            }
+          ],
+          "deferred": [],
+          "needs_human": [
+            {
+              "item_id": "ITM011",
+              "item_name": "Cellotape (Roll)",
+              "reason": "No purchase history - human must set quantity"
+            },
+            {
+              "item_id": "ITM012",
+              "item_name": "Glue Stick",
+              "reason": "No purchase history - human must set quantity"
+            },
+            {
+              "item_id": "ITM013",
+              "item_name": "Marker Pens (Black)",
+              "reason": "No purchase history - human must set quantity"
+            },
+            {
+              "item_id": "ITM015",
+              "item_name": "Calculator (Basic)",
+              "reason": "No purchase history - human must set quantity"
+            }
+          ],
+          "not_low": [],
+          "rule": "most urgent first (stock/reorder_point), skip items that do not fit and continue",
+          "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv"
+        }
+      },
+      {
+        "turn": 2,
+        "name": "draft_requisition",
+        "args": {
+          "items": [
+            "ITM003",
+            "ITM001",
+            "ITM005",
+            "ITM007",
+            "ITM009",
+            "ITM006"
+          ]
+        },
+        "status": "ok",
+        "result": {
+          "draft_id": "REQ-20261002-231219-7FED",
+          "created_at": "2026-10-02T23:12:19+00:00",
+          "created_by": "Mwesigwa Arnold Mugahi",
+          "status": "DRAFT - AWAITING HUMAN APPROVAL",
+          "lines": [
+            {
+              "item_id": "ITM003",
+              "item_name": "Rulers 30cm",
+              "current_stock": 2,
+              "reorder_point": 15,
+              "recommended_qty": 57,
+              "quantity_basis": "469 purchased over 12 months = 39.08/month; 39.08 x 1.5 = 58.625; minus stock 2 = 56.625; rounded up to 57",
+              "selected_supplier": "Kampala Office Supplies",
+              "unit_price_ugx": 938,
+              "min_order_qty": 20,
+              "lead_time_days": 3,
+              "total_cost_ugx": 53466,
+              "requires_override": false,
+              "override_reason": ""
+            },
+            {
+              "item_id": "ITM001",
+              "item_name": "Bic Pens (Blue)",
+              "current_stock": 5,
+              "reorder_point": 20,
+              "recommended_qty": 65,
+              "quantity_basis": "555 purchased over 12 months = 46.25/month; 46.25 x 1.5 = 69.375; minus stock 5 = 64.375; rounded up to 65",
+              "selected_supplier": "Kampala Office Supplies",
+              "unit_price_ugx": 476,
+              "min_order_qty": 20,
+              "lead_time_days": 3,
+              "total_cost_ugx": 30940,
+              "requires_override": false,
+              "override_reason": ""
+            },
+            {
+              "item_id": "ITM005",
+              "item_name": "Erasers",
+              "current_stock": 8,
+              "reorder_point": 20,
+              "recommended_qty": 63,
+              "quantity_basis": "567 purchased over 12 months = 47.25/month; 47.25 x 1.5 = 70.875; minus stock 8 = 62.875; rounded up to 63",
+              "selected_supplier": "Kampala Office Supplies",
+              "unit_price_ugx": 188,
+              "min_order_qty": 20,
+              "lead_time_days": 3,
+              "total_cost_ugx": 11844,
+              "requires_override": false,
+              "override_reason": ""
+            },
+            {
+              "item_id": "ITM007",
+              "item_name": "Stapler Medium",
+              "current_stock": 3,
+              "reorder_point": 5,
+              "recommended_qty": 88,
+              "quantity_basis": "725 purchased over 12 months = 60.42/month; 60.42 x 1.5 = 90.625; minus stock 3 = 87.625; rounded up to 88",
+              "selected_supplier": "Kampala Office Supplies",
+              "unit_price_ugx": 8215,
+              "min_order_qty": 20,
+              "lead_time_days": 3,
+              "total_cost_ugx": 722920,
+              "requires_override": false,
+              "override_reason": ""
+            },
+            {
+              "item_id": "ITM009",
+              "item_name": "Files (Box)",
+              "current_stock": 6,
+              "reorder_point": 10,
+              "recommended_qty": 60,
+              "quantity_basis": "525 purchased over 12 months = 43.75/month; 43.75 x 1.5 = 65.625; minus stock 6 = 59.625; rounded up to 60",
+              "selected_supplier": "Kampala Office Supplies",
+              "unit_price_ugx": 3298,
+              "min_order_qty": 20,
+              "lead_time_days": 3,
+              "total_cost_ugx": 197880,
+              "requires_override": false,
+              "override_reason": ""
+            },
+            {
+              "item_id": "ITM006",
+              "item_name": "A4 Printing Paper (Rim)",
+              "current_stock": 12,
+              "reorder_point": 15,
+              "recommended_qty": 53,
+              "quantity_basis": "520 purchased over 12 months = 43.33/month; 43.33 x 1.5 = 65.000; minus stock 12 = 53.000; rounded up to 53",
+              "selected_supplier": "Kampala Office Supplies",
+              "unit_price_ugx": 11363,
+              "min_order_qty": 20,
+              "lead_time_days": 3,
+              "total_cost_ugx": 602239,
+              "requires_override": false,
+              "override_reason": ""
+            }
+          ],
+          "skipped": [],
+          "estimated_budget_ugx": 1619289,
+          "budget_range_ugx": {
+            "low": 1457360,
+            "high": 1781218
+          },
+          "requires_override_any": false,
+          "decision": null,
+          "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
+          "saved_to": "data/drafts/REQ-20261002-231219-7FED.json"
+        }
+      }
+    ]
+  },
+  "limits": {
+    "max_turns": 5,
+    "max_tool_calls": 6,
+    "tools": [
+      "draft_requisition",
+      "get_low_stock",
+      "plan_within_budget"
+    ]
+  }
+}

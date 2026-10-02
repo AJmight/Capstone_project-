@@ -1,7 +1,7 @@
 # Prompt Version History — SME Procurement Assistant
 
 Current prompts:
-- **Tool mode:** `prompts/procurement_assistant_v2.0.0.md` (loaded by `src/tool_agent.py`, Week 4+)
+- **Tool mode:** `prompts/procurement_assistant_v2.2.1.md` (loaded by `src/tool_agent.py` and `src/restock_agent.py`, Week 5)
 - **Context mode:** `prompts/procurement_assistant_v1.2.0.md` (loaded by `src/ai_engine.py`, Week 2 baseline)
 
 Older versions are kept unchanged in `prompts/archive/`.
@@ -11,9 +11,30 @@ Older versions are kept unchanged in `prompts/archive/`.
 | 1.0.0 | `archive/procurement_assistant_v1.0.0_draft.md` | Not run (failed review: see below) |
 | 1.1.0 | `archive/procurement_assistant_v1.1.0.md` | 7/10 — `evidence/week2/evaluation_v1.1.0.md` |
 | 1.2.0 | `procurement_assistant_v1.2.0.md` | 10/10, then 9/10 after TC-08 checker was tightened — `docs/evaluation/week2-prompt-evaluation.md` |
-| 2.0.0 | `procurement_assistant_v2.0.0.md` | Live agent 6/6 — `docs/evaluation/week4-tool-evaluation.md` |
+| 2.0.0 | `archive/procurement_assistant_v2.0.0.md` | Live agent 6/6 — `docs/evaluation/week4-tool-evaluation.md` |
+| 2.1.0 | `archive/procurement_assistant_v2.1.0.md` | Traces 4/4; Week 4 regression **5/6** (L-05 → F-13) |
+| 2.2.0 | `archive/procurement_assistant_v2.2.0.md` | Week 4 regression 6/6; traces 4/4 but T4 needed the code output check (F-14) |
+| 2.2.1 | `procurement_assistant_v2.2.1.md` | T4 clean — `docs/evaluation/week5-agent-evaluation.md` |
 
 ---
+
+## v2.2.1 — 2026-10-03 (patch)
+
+Section 7 summary: the status line only when a draft was created; otherwise "No requisition was created."
+**Why:** on v2.2.0 the live T4 trace (no draft) ended with the status line and the code output check had
+to correct it (F-14) — Section 7 contradicted hard rule 3.
+
+## v2.2.0 — 2026-10-03
+
+Hard rule 3: only mention a draft / draft ID / status line if `draft_requisition` returned one in this
+conversation; without that tool, say the role cannot create requisitions and label figures "information only".
+**Why:** F-13 — Week 4 regression L-05 on v2.1.0 showed a viewer a fake "awaiting approval" draft built
+from read-only tools. Also enforced in code by `tool_agent.check_output()`.
+
+## v2.1.0 — 2026-10-03
+
+Added `plan_within_budget` to the tool table and Section 7 "Weekly Restock Task" (plan → decide → draft
+once → summary; retry `SERVICE_UNAVAILABLE` once). **Why:** Week 5 bounded agent and its task contract.
 
 ## v2.0.0 — 2026-10-02 (major: architecture change)
 
