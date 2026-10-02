@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-02 (end of Week 2 work). Read this before changing anything.
+**Last updated:** 2026-10-02 (end of Week 4 work; Week 3 deliberately deferred). Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -9,8 +9,10 @@ This replaces an earlier handoff draft that contained outdated facts (listed in 
 - **Brief:** `C:\Users\user\OneDrive\Desktop\year4 sem1\emerging trends\BSE4104 AI Agentic Capstone Assignment.docx`
 - **Dates:** 31 Aug – 23 Oct 2026; presentations 27/29/30 Oct 2026
 - **Repo:** https://github.com/AJmight/Capstone_project- (`main`); local `C:\Users\user\Capstone_project-`
-- **AI Engineering Lead:** AJ. Other roles: TBD.
-- **Today is Week 5 by the calendar; the project has completed Week 2.** Weeks 3–5 are behind.
+- **AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS), GitHub AJmight. Other roles: TBD.
+- **AI tools used:** Gemini (product model + proof-reading), Claude Code (coding partner), DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline fixes).
+- **Code style rule:** comment every module, section and significant line (groupmates review the code).
+- Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → **Week 4 (done)** → Week 5 → Week 3 → 6–8.
 
 ## 2. Problem and boundaries
 
@@ -63,16 +65,30 @@ Chat sessions are used for multi-turn memory; they do not avoid 503s.
 - `draft_requisition: []` is correct for analysis-only requests such as `analyze_inventory()`.
 - Refusals return `{"error": "REFUSAL: ..."}` — there is no `[STATUS: ...]` tag any more.
 
+## 6b. Week 4 (tool mode) — what exists
+
+| File | Purpose |
+|:---|:---|
+| `src/tools/procurement.py` | 4 deterministic tools: `get_low_stock`, `compare_supplier_quotes`, `estimate_reorder_quantity`, `draft_requisition` (saves `data/drafts/REQ-*.json`, git-ignored) |
+| `src/tools/registry.py` | `execute_tool()`: allow-list → role (viewer/staff/owner) → argument validation → `created_by` injected → safe run → `evidence/week4/tool_traces.jsonl` |
+| `src/tool_agent.py` | `run_agent(question, role, user_name)`: bounded loop (6 turns, 12 tool calls), AFC off, role-filtered tools, fallback via `call_with_fallback`, run trace `evidence/week4/agent_traces.jsonl` |
+| `src/approvals.py` | Human-only approve/reject CLI with typed confirmation and `data/drafts/audit_log.jsonl`; NOT a tool |
+| `prompts/procurement_assistant_v2.0.0.md` | Tool-mode prompt (v1.2.0 stays for `ai_engine.py`) |
+| `tests/test_week4_tools.py` | 22 offline (no model) + 6 live tests |
+| `docs/requirements/tool-catalogue.md`, `tool-schemas.json`, `docs/architecture/architecture-week4.md`, `docs/evaluation/week4-tool-evaluation.md`, `docs/weekly-reports/week4-*.md` | Week 4 deliverables and trail |
+
+Results: offline 22/22, live 6/6. **F-04 closed.** New: F-07 (model requested a tool it was not given — blocked by the registry).
+
 ## 7. Known issues
 
-- **F-04 (open):** under the TC-08 injection prompt, `gemini-3.5-flash-lite` drafted all low items instead of the one requested and miscalculated 3 quantities. Fix with deterministic tools (Week 4) and v1.3.0 wording.
+- F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (document in final report).
 - v1.2.0 has not yet been evaluated on `gemini-3.8-flash` (quota exhausted during runs).
 - Week 1 documents exist only as `.docx`; `docs/requirements/` should hold the charter, user stories and AI Boundary Matrix.
 - User stories mention sugar/dairy/cooking oil sales; the data is stationery purchases. Align stories with data.
 
 ## 8. Next steps (priority order)
 
-1. Week 4: deterministic tools — `get_low_stock()`, `compare_quotes()`, `estimate_reorder()`, `draft_requisition()` — with input/output schemas, authorisation and failure tests; Gemini function calling.
+1. ~~Week 4 tools~~ — done.
 2. Week 5: bounded agent loop (plan → act → observe → stop), max iterations, tool allow-list, human approval gate, 3 traces (one failure/recovery).
 3. Week 3: RAG over a small procurement-policy corpus with a source register and 15 questions.
 4. Weeks 6–8 per the brief. Groq can be added as a cross-provider fallback in `llm_client.py`.

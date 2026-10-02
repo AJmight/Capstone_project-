@@ -47,7 +47,7 @@
 
 | Member | Role | Tasks owned | Evidence |
 |:---|:---|:---|:---|
-| AJ | AI Engineering Lead | Prompt spec v1.0–v1.2, `llm_client.py`, `ai_engine.py`, 10-case evaluation | Commits on `main` |
+| Mwesigwa Arnold Mugahi (23/U/244738/PS) | AI Engineering Lead | Prompt spec v1.0–v1.2, `llm_client.py`, `ai_engine.py`, 10-case evaluation | Commits on `main` |
 | [name] | Project/Requirements Lead | [this report, ...] | [link] |
 | [name] | Application/Integration Lead | [...] | [link] |
 | [name] | Quality/Security Lead | [review of test cases, ...] | [link] |

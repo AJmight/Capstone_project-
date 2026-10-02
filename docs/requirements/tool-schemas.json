@@ -1,0 +1,91 @@
+{
+  "generated_from": "src/tools/registry.py TOOL_REGISTRY",
+  "roles": {
+    "viewer": [
+      "read"
+    ],
+    "staff": [
+      "draft",
+      "read"
+    ],
+    "owner": [
+      "draft",
+      "read"
+    ]
+  },
+  "tools": [
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "get_low_stock",
+      "description": "List every inventory item whose current_stock is at or below its reorder_point, with item IDs. Use it to answer 'what is low?' and to find item IDs before drafting.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "compare_supplier_quotes",
+      "description": "Return all supplier quotes for ONE item sorted cheapest first (ties broken by shorter lead time), with minimum order quantities.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "An item ID such as ITM001, or the item's name such as 'Bic Pens (Blue)'."
+          }
+        },
+        "required": [
+          "item"
+        ]
+      }
+    },
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "estimate_reorder_quantity",
+      "description": "Compute the exact recommended reorder quantity for ONE item from its purchase history (1.5 months of average demand minus current stock, rounded up, raised to supplier minimum order), with the working and the 200% safety-cap check. Always use this instead of doing arithmetic.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "An item ID such as ITM001, or the item's name such as 'Bic Pens (Blue)'."
+          }
+        },
+        "required": [
+          "item"
+        ]
+      }
+    },
+    {
+      "permission": "draft",
+      "context_args_injected_by_system": [
+        "created_by"
+      ],
+      "name": "draft_requisition",
+      "description": "Create and save a DRAFT purchase requisition for the listed items. Python computes every quantity, price, total and budget. Items that are not low on stock are skipped automatically. The draft is NOT sent or approved; a human must review it.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "An item ID such as ITM001, or the item's name such as 'Bic Pens (Blue)'."
+            },
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Items the user asked for (IDs or names)."
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    }
+  ]
+}

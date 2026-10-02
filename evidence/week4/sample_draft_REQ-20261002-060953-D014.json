@@ -1,0 +1,32 @@
+{
+  "draft_id": "REQ-20261002-060953-D014",
+  "created_at": "2026-10-02T06:09:53+00:00",
+  "created_by": "test-L-03",
+  "status": "DRAFT - AWAITING HUMAN APPROVAL",
+  "lines": [
+    {
+      "item_id": "ITM001",
+      "item_name": "Bic Pens (Blue)",
+      "current_stock": 5,
+      "reorder_point": 20,
+      "recommended_qty": 65,
+      "quantity_basis": "555 purchased over 12 months = 46.25/month; 46.25 x 1.5 = 69.375; minus stock 5 = 64.375; rounded up to 65",
+      "selected_supplier": "Kampala Office Supplies",
+      "unit_price_ugx": 476,
+      "min_order_qty": 20,
+      "lead_time_days": 3,
+      "total_cost_ugx": 30940,
+      "requires_override": false,
+      "override_reason": ""
+    }
+  ],
+  "skipped": [],
+  "estimated_budget_ugx": 30940,
+  "budget_range_ugx": {
+    "low": 27846,
+    "high": 34034
+  },
+  "requires_override_any": false,
+  "decision": null,
+  "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv"
+}

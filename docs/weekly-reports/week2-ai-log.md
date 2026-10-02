@@ -5,13 +5,15 @@ generated work was reviewed and tested before it was accepted.
 
 ## AI tools used
 
-| Tool | Used for | Confirm |
-|:---|:---|:---:|
-| Google Gemini (AI Studio API) | The model under evaluation (not a coding assistant) | ✅ |
-| Claude Code (Anthropic, Claude Opus 5.5) | Prompt review and rewrite, `llm_client.py`, test runner, documentation, git operations | ✅ |
-| DeepSeek | Planning, early code drafts (`ai_engine.py` v0.1, test-case list), peer review | ✅ |
-| Kilo Code (VS Code extension) | [confirm whether used — a `.kilo/` folder exists in the repo] | ⬜ |
-| GitHub Copilot | [confirm whether used] | ⬜ |
+**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS)
+
+| Tool | Used for |
+|:---|:---|
+| Google Gemini (AI Studio API) | The model under evaluation; also used to proof-read code when it fails |
+| Claude Code (Anthropic, Claude Opus 5.5) | Coding partner: prompt review and rewrite, `llm_client.py`, test runner, documentation, git operations |
+| DeepSeek | Supervisor/teacher: planning, step-by-step guides, early code drafts (`ai_engine.py` v0.1, test-case list), peer review |
+| ChatGPT (OpenAI) | Explaining concepts not clear from DeepSeek |
+| GitHub Copilot | Fixing inline errors in the editor |
 
 ## Material AI-assisted decisions
 

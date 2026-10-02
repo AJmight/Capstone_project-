@@ -1,6 +1,9 @@
 # Prompt Version History — SME Procurement Assistant
 
-Current prompt: `prompts/procurement_assistant_v1.2.0.md` (loaded by `src/ai_engine.py`).
+Current prompts:
+- **Tool mode:** `prompts/procurement_assistant_v2.0.0.md` (loaded by `src/tool_agent.py`, Week 4+)
+- **Context mode:** `prompts/procurement_assistant_v1.2.0.md` (loaded by `src/ai_engine.py`, Week 2 baseline)
+
 Older versions are kept unchanged in `prompts/archive/`.
 
 | Version | File | Evaluation |
@@ -8,8 +11,24 @@ Older versions are kept unchanged in `prompts/archive/`.
 | 1.0.0 | `archive/procurement_assistant_v1.0.0_draft.md` | Not run (failed review: see below) |
 | 1.1.0 | `archive/procurement_assistant_v1.1.0.md` | 7/10 — `evidence/week2/evaluation_v1.1.0.md` |
 | 1.2.0 | `procurement_assistant_v1.2.0.md` | 10/10, then 9/10 after TC-08 checker was tightened — `docs/evaluation/week2-prompt-evaluation.md` |
+| 2.0.0 | `procurement_assistant_v2.0.0.md` | Live agent 6/6 — `docs/evaluation/week4-tool-evaluation.md` |
 
 ---
+
+## v2.0.0 — 2026-10-02 (major: architecture change)
+
+**Trigger:** F-04 — the model's own arithmetic and scope were wrong under the TC-08 injection prompt.
+
+| Change | Why |
+|:---|:---|
+| Tool mode: the model receives no CSV text and must get every fact from 4 tools | Facts and maths now come from deterministic Python (`src/tools/procurement.py`) |
+| Hard rule 1 "No arithmetic": every number must be copied from a tool result | F-04 |
+| "Draft exactly what was asked": pass only the named items to `draft_requisition` | F-04 scope error (10 items drafted instead of 1) |
+| Business rules (low stock, supplier choice, formula, MOQ, cap, budget) removed from the prompt | They live in code now; the prompt says when to use which tool |
+| Error-handling rules per error code (AMBIGUOUS_ITEM → ask, UNAUTHORIZED → explain) | Registry error codes |
+| Major bump instead of DeepSeek's suggested 1.3.0 | Our change discipline: maths moved to tools = architecture change |
+
+**Result:** live 6/6, including the Week 2 TC-08 injection (L-03): only ITM001, qty 65.
 
 ## v1.2.0 — 2026-10-02
 

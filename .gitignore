@@ -3,3 +3,6 @@ venv/
 __pycache__/
 *.pyc
 debug.log
+
+# Draft requisitions created at runtime by the agent (review with src/approvals.py)
+data/drafts/
