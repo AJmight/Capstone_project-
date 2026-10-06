@@ -1,0 +1,21 @@
+# Week 3 RAG Answer Results (index v1.1.0, prompt policy_qa v1.0.0)
+
+Run at 2026-10-06T06:04:30 | **15/15 passed**
+
+| ID | Type | Question | Result | Reason | Model | Sources given |
+|---|---|---|:---:|---|---|---|
+| RA-01 | answerable | Who can approve a requisition of UGX 800,000? | **PASS** | ok | gemini-3.8-flash | POL-01#approval-thresholds, POL-01#quotations, FAQ-01#can-the-ai-assistant-approve-an-order-if-the-owner-is-away, FAQ-01#what-happens-to-items-that-do-not-fit-the-weekly-budget, PRC-01#step-4-approve-or-reject, PRC-01#step-5-order-and-pay |
+| RA-02 | answerable | What is the minimum order quantity at Nakawa Stationers? | **PASS** | ok | gemini-3.6-flash | SUP-02#ordering-and-minimum-order, SUP-02#delivery, SUP-03#ordering-and-minimum-order, SUP-03#delivery, FAQ-01#which-supplier-do-we-use-for-an-urgent-small-order, FAQ-01#how-long-do-we-keep-requisition-records |
+| RA-03 | answerable | How long do we keep requisition records? | **PASS** | ok | gemini-3.8-flash | FAQ-01#how-long-do-we-keep-requisition-records, FAQ-01#who-sets-reorder-points, POL-01#records, PRC-03#record-backups |
+| RA-04 | answerable | Can staff pay a supplier by mobile money? | **PASS** | ok | gemini-3.8-flash | POL-02#who-pays-suppliers, POL-02#payment-methods, POL-02#when-to-pay, GDE-02#what-the-assistant-cannot-do, GDE-02#roles |
+| RA-05 | answerable | What should staff do when a sales rep pushes a today-only discount? | **PASS** | ok | gemini-3.8-flash | GDE-01#the-problem, GDE-01#what-staff-should-do, SUP-01#ordering-and-minimum-order, SUP-01#delivery, GDE-01#gifts |
+| RP-01 | partial | What is Entebbe Traders' delivery fee and on which days do they deliver? | **PASS** | ok | gemini-3.8-flash | SUP-03#delivery, SUP-03#payment-terms, SUP-03#returns, SUP-01#delivery, SUP-01#payment-terms |
+| RP-02 | partial | What is our weekly restock budget this week and how is it set? | **PASS** | ok | gemini-3.6-flash | POL-02#weekly-restock-budget, POL-02#budget-estimates, FAQ-01#what-happens-to-items-that-do-not-fit-the-weekly-budget, FAQ-01#which-supplier-do-we-use-for-an-urgent-small-order, PRC-02#urgency, PRC-02#school-terms-and-seasons |
+| RP-03 | partial | How many days does Kampala Office Supplies take to deliver, and what discount do they give for bulk orders? | **PASS** | ok | gemini-3.6-flash | SUP-01#payment-terms, SUP-01#returns, SUP-01#delivery |
+| RP-04 | partial | Who approves requisitions above UGX 2,000,000 and how much did we spend on approved requisitions last year? | **PASS** | ok | gemini-3.5-flash | POL-01#approval-thresholds, POL-01#quotations, FAQ-01#how-long-do-we-keep-requisition-records, FAQ-01#who-sets-reorder-points, POL-01#who-may-request-a-purchase |
+| RP-05 | partial | When are reorder points raised for school terms, and by how much for calculators? | **PASS** | ok | gemini-3.6-flash | PRC-02#school-terms-and-seasons, FAQ-01#who-sets-reorder-points, FAQ-01#what-should-i-do-if-a-delivery-is-damaged, PRC-02#reorder-point, PRC-02#how-much-to-order |
+| RU-01 | unanswerable | What is the phone number of the Kampala Office Supplies manager? | **PASS** | refused | gemini-3.7-flash | SUP-01#overview, SUP-01#ordering-and-minimum-order, SUP-02#overview, SUP-02#ordering-and-minimum-order, SUP-01#returns |
+| RU-02 | unanswerable | What is the VAT rate on stationery in Uganda? | **PASS** | refused | gemini-3.7-flash | SUP-02#overview, SUP-02#ordering-and-minimum-order, SUP-02#payment-terms, SUP-02#returns, SUP-02#when-to-use-nakawa |
+| RU-03 | unanswerable | What prices does our competitor across the road charge? | **PASS** | refused | gemini-3.6-flash | SUP-02#overview, SUP-02#ordering-and-minimum-order, SUP-01#overview, SUP-01#ordering-and-minimum-order, POL-02#budget-estimates |
+| RU-04 | unanswerable | How much is the shop assistant's monthly salary? | **PASS** | refused | gemini-3.6-flash | PRC-02#how-much-to-order, PRC-02#items-without-history, GDE-02#data, GDE-02#checking-the-assistant |
+| RU-05 | unanswerable | Will it rain in Kampala tomorrow? | **PASS** | refused | gemini-3.6-flash | SUP-01#overview, SUP-01#ordering-and-minimum-order, SUP-03#delivery, SUP-03#payment-terms, SUP-02#overview, SUP-02#ordering-and-minimum-order |

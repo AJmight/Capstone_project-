@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-03 (end of Week 5 work; Week 3 next). Read this before changing anything.
+**Last updated:** 2026-10-06 (MVP: Weeks 1–5 complete; next Week 6). AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -12,7 +12,7 @@ This replaces an earlier handoff draft that contained outdated facts (listed in 
 - **AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS), GitHub AJmight. Other roles: TBD.
 - **AI tools used:** Gemini (product model + proof-reading), Claude Code (coding partner), DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline fixes).
 - **Code style rule:** comment every module, section and significant line (groupmates review the code).
-- Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → Week 4 → **Week 5 (done)** → Week 3 → 6–8.
+- Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → 4 → 5 → 3 (all done) → 6–8. Week 1 docs consolidated into `docs/requirements/` on 2026-10-06.
 
 ## 2. Problem and boundaries
 
@@ -73,7 +73,7 @@ Chat sessions are used for multi-turn memory; they do not avoid 503s.
 | `src/tools/registry.py` | `execute_tool()`: allow-list → role (viewer/staff/owner) → argument validation → `created_by` injected → safe run → `evidence/week4/tool_traces.jsonl` |
 | `src/tool_agent.py` | `run_agent(question, role, user_name)`: bounded loop (6 turns, 12 tool calls), AFC off, role-filtered tools, fallback via `call_with_fallback`, run trace `evidence/week4/agent_traces.jsonl` |
 | `src/approvals.py` | Human-only approve/reject CLI with typed confirmation and `data/drafts/audit_log.jsonl`; NOT a tool |
-| `prompts/procurement_assistant_v2.2.1.md` | Tool-mode prompt (v1.2.0 stays for `ai_engine.py`; v2.0.0–v2.2.0 in `archive/`) |
+| `prompts/procurement_assistant_v2.4.0.md` | Tool-mode prompt (v1.2.0 stays for `ai_engine.py`; v2.0.0–v2.3.0 in `archive/`) |
 | `tests/test_week4_tools.py` | 22 offline (no model) + 6 live tests |
 | `docs/requirements/tool-catalogue.md`, `tool-schemas.json`, `docs/architecture/architecture-week4.md`, `docs/evaluation/week4-tool-evaluation.md`, `docs/weekly-reports/week4-*.md` | Week 4 deliverables and trail |
 
@@ -94,6 +94,23 @@ Results: offline 16/16 (+ Week 4 22/22), traces 4/4, Week 4 live regression 6/6 
 New findings: F-12 (±10 % range can exceed budget — open), F-13 (false draft claim — fixed in code + prompt),
 F-14 (prompt contradiction — fixed v2.2.1), F-15 (floats from Gemini — fixed).
 
+## 6d. Week 3 (RAG) and MVP additions — 2026-10-06
+
+| File | Purpose |
+|:---|:---|
+| `knowledge/corpus/*.md` (12), `knowledge/source-register.md` | Synthetic policy corpus and provenance |
+| `src/rag/index.py` v1.1.0 | Ingest, section chunking, tokeniser (light stemmer), BM25, `MIN_SCORE` 2.0 |
+| `src/rag/policy_qa.py` v1.0.1 | retrieve (+ next section) → `[S#]` context → Gemini (`prompts/policy_qa_v1.0.0.md`) → `check_citations` |
+| `src/tools/knowledge.py` | `search_policy` agent tool |
+| `src/tools/procurement.py` v1.2.0 | + `get_inventory` (US 1), `query_purchase_history` (US 6); draft lines store `safety_cap` |
+| `src/approvals.py` v1.1.0 | + `edit` (US 9) with AI suggestion kept and audit entry |
+| `src/app.py` | Console MVP: ask / restock / policy / review drafts / stock |
+| `tests/test_week3_rag.py`, `tests/test_mvp_tools.py` | RAG (offline retrieval + 15 live) and MVP (7 offline + 6 live) |
+| `docs/requirements/project-charter.md`, `user-stories.md`, `ai-boundary-matrix.md`, `docs/architecture/context-diagram.md` | Week 1 deliverables |
+
+Results: retrieval hit@3 10/10; RAG answers 15/15; MVP 7/7 + 6/6; regressions on v2.4.0 all pass.
+Failures: R-1…R-5 (R-4 open: numeric ranges in keyword search), F-16 fixed. Summary: `docs/evaluation/mvp-evaluation.md`.
+
 ## 7. Known issues
 
 - F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (document in final report).
@@ -105,8 +122,9 @@ F-14 (prompt contradiction — fixed v2.2.1), F-15 (floats from Gemini — fixed
 
 1. ~~Week 4 tools~~ — done.
 2. ~~Week 5~~ — done.
-3. **Week 3 (next):** RAG over a small procurement-policy corpus with a source register and 15 questions; expose policy retrieval to the agent as a read tool.
-4. Weeks 6–8 per the brief. Groq can be added as a cross-provider fallback in `llm_client.py`.
+3. ~~Week 3~~ — done (the Lead is studying the concept: `docs/notes/rag-explained.md`; pause further RAG changes until they ask).
+4. Week 6 (AI Lead): SQLite state for drafts/audit, one justified memory, MCP-style interface. Weeks 7–8 per the brief; role owners in `docs/ONBOARDING.md` §6.
+5. Weeks 6–8 per the brief. Groq can be added as a cross-provider fallback in `llm_client.py`.
 
 ## 9. Corrections to the earlier handoff draft
 

@@ -115,6 +115,72 @@
           "items"
         ]
       }
+    },
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "get_inventory",
+      "description": "List inventory items with current stock, reorder point and whether each is low. Optionally filter by category (Stationery, Office, Electronics).",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Optional category name; omit for all items."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "query_purchase_history",
+      "description": "Past purchases of ONE item with exact totals (quantity and spend), optionally for a month range. Use for questions like 'how many pens did we buy in March 2025?'. Returns data_range so you can tell the user when a period has no data.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "An item ID such as ITM001, or the item's name such as 'Bic Pens (Blue)'."
+          },
+          "start_month": {
+            "type": "string",
+            "description": "First month, YYYY-MM (optional)."
+          },
+          "end_month": {
+            "type": "string",
+            "description": "Last month, YYYY-MM (optional)."
+          }
+        },
+        "required": [
+          "item"
+        ]
+      }
+    },
+    {
+      "permission": "read",
+      "context_args_injected_by_system": [],
+      "name": "search_policy",
+      "description": "Search the shop's policy and procedure documents (approval limits, payments, supplier delivery/returns/terms, reorder guidelines, supplier pressure). Returns passages with source_id. Use it for ANY policy or process question and cite the source_id; never answer policy questions from memory.",
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The question or key words."
+          },
+          "top_k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "How many passages (default 3)."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
     }
   ]
 }

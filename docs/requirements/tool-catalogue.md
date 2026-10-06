@@ -2,7 +2,7 @@
 
 | Field | Value |
 |:---|:---|
-| **Version** | 1.1 (Week 5: tool 5 `plan_within_budget`, task allow-list, repeat guard, output check) |
+| **Version** | 1.2 (MVP 2026-10-06: tools 6–8 `get_inventory`, `query_purchase_history`, `search_policy`) |
 | **Owner** | Mwesigwa Arnold Mugahi (AI Engineering Lead) |
 | **Code** | `src/tools/procurement.py` (functions), `src/tools/registry.py` (allow-list, permissions, executor) |
 | **Machine-readable schemas** | `docs/requirements/tool-schemas.json` (exported from the code) |
@@ -19,9 +19,9 @@
 
 | Role | Permissions | Tools shown to the model |
 |:---|:---|:---|
-| `viewer` | read | `get_low_stock`, `compare_supplier_quotes`, `estimate_reorder_quantity`, `plan_within_budget` |
-| `staff` | read, draft | all five |
-| `owner` | read, draft | all five |
+| `viewer` | read | the 7 read tools (all except `draft_requisition`) |
+| `staff` | read, draft | all eight |
+| `owner` | read, draft | all eight |
 | any other | none | none |
 
 **No role can approve, order or pay through the AI**: those tools do not exist. Approval is a human
@@ -85,6 +85,42 @@ Covers User Stories 2, 4, 5 (unique ID, date, creator), 7 (reasoning trail), 8 (
 | **Rules** | costs as in `draft_requisition`; urgency = stock / reorder point (lower first); greedy skip-and-continue within the budget; no-history or no-quote items → `needs_human` |
 | **Permission / side effects** | read / none |
 | **Used by** | the Weekly Restock Agent (`src/restock_agent.py`) before drafting |
+
+## Tool 6 — `get_inventory` (MVP, User Story 1)
+
+| Field | Value |
+|:---|:---|
+| **Purpose** | Stock levels for all items or one category |
+| **Input** | `category: string` (optional; case-insensitive: Stationery, Office, Electronics) |
+| **Output** | `{"count", "category", "categories_available", "items": [{item_id, item_name, category, current_stock, reorder_point, is_low}]}` |
+| **Failure** | `UNKNOWN_CATEGORY` naming the real categories; `INVALID_DATA` |
+| **Permission / side effects** | read / none |
+
+## Tool 7 — `query_purchase_history` (MVP, User Story 6)
+
+| Field | Value |
+|:---|:---|
+| **Purpose** | Past purchases of one item, optionally for a month range, with exact totals |
+| **Input** | `item: string` (ID or name), `start_month`, `end_month` (`YYYY-MM`, optional, inclusive) |
+| **Output** | `{"item_id", "item_name", "period", "data_range": {first_month, last_month}, "records_found", "purchases": [{date, quantity, unit_price_ugx}], "total_quantity", "total_spend_ugx", "note"?}` |
+| **Failure** | `INVALID_PARAMETER` (bad month, reversed range), `UNKNOWN_ITEM`, `AMBIGUOUS_ITEM`; empty period → `note` + `data_range` |
+| **Permission / side effects** | read / none |
+
+## Tool 8 — `search_policy` (Week 3 RAG for the agent)
+
+| Field | Value |
+|:---|:---|
+| **Purpose** | Search the 12 policy/procedure documents (`knowledge/corpus/`) |
+| **Input** | `query: string`, `top_k: integer 1–5` (default 3) |
+| **Output** | `{"query", "results": [{source_id, title, section, text, score}], "note"?}` — `source_id` such as `POL-01#approval-thresholds` must be cited |
+| **Failure** | empty `results` + note when nothing scores above the minimum; `INVALID_PARAMETER` |
+| **Permission / side effects** | read / none — implemented in `src/tools/knowledge.py` on top of `src/rag/index.py` |
+
+## Human edit before approval (MVP, User Story 9)
+
+`py src\approvals.py edit <draft_id> --item ITM001 --qty 50 --by "Name" --reason "..."` — only on drafts
+awaiting approval; keeps `ai_suggested_qty` and an `edits` list on the line; recalculates line total,
+budget, ±10 % range and the 200 % cap flag; appends an `EDITED` entry to `audit_log.jsonl`.
 
 ## Executor errors (from `registry.execute_tool`)
 

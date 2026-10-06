@@ -22,6 +22,8 @@ THE FOUR TOOLS
                                             status always "DRAFT - AWAITING HUMAN APPROVAL"
   5. plan_within_budget(items, budget)   -> (Week 5) which low items fit a budget, most urgent
                                             first; the rest are "deferred" or "needs_human"
+  6. get_inventory(category)            -> (MVP, US 1) stock levels, optionally for one category
+  7. query_purchase_history(item, from, to) -> (MVP, US 6) past purchases + exact totals
 
 There is deliberately NO approve / order / pay tool. Approval is done by a
 human with src/approvals.py, which the model cannot reach.
@@ -45,7 +47,7 @@ The business rules here are the same ones written in prompts/procurement_assista
 (Section 4); the prompt v2.0.0 now tells the model to use these tools instead.
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.1.0 (Week 5: plan_within_budget)
+Version: 1.2.0 (MVP: get_inventory, query_purchase_history)
 """
 
 # ---------------------------------------------------------------------------
@@ -400,6 +402,7 @@ def draft_requisition(items: list[str], created_by: str = "unknown") -> dict:
             "total_cost_ugx": calc["recommended_qty"] * unit_price,   # exact integer maths
             "requires_override": calc["requires_override"],
             "override_reason": calc["override_reason"],
+            "safety_cap": calc["safety_cap"],        # kept so a human edit can be re-checked (approvals.py)
         })
 
     if not lines:
@@ -521,3 +524,102 @@ def plan_within_budget(items: list[str], budget_ugx: int | None = None) -> dict:
         "rule": "most urgent first (stock/reorder_point), skip items that do not fit and continue",
         "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
     }
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: get_inventory  (MVP - User Story 1: view stock, optionally by category)
+# ---------------------------------------------------------------------------
+@_returns_errors_as_results
+def get_inventory(category: str | None = None) -> dict:
+    """
+    List inventory items with their stock levels, optionally for one category.
+
+    category  e.g. "Stationery", "Office", "Electronics" (case-insensitive); None = all items
+    Reads: current_stock.csv
+    Returns: {"count", "category", "categories_available", "items": [{item_id, item_name, category,
+              current_stock, reorder_point, is_low}]}
+    An unknown category returns UNKNOWN_CATEGORY with the list of real categories, so the model
+    can tell the user what exists instead of guessing.
+    """
+    inventory = _read_csv("current_stock.csv")
+    categories = sorted({r["category"] for r in inventory})
+    if category is not None:
+        if not isinstance(category, str) or not category.strip():
+            raise ToolError("INVALID_PARAMETER", "category must be a non-empty string")
+        match = [c for c in categories if c.casefold() == category.strip().casefold()]
+        if not match:
+            raise ToolError("UNKNOWN_CATEGORY", f"'{category}' is not a category. "
+                                                f"Available: {', '.join(categories)}")
+        category = match[0]                                   # use the spelling from the data
+    items = []
+    for row in inventory:
+        if category and row["category"] != category:
+            continue
+        stock = _int(row, "current_stock", "current_stock.csv")
+        reorder_point = _int(row, "reorder_point", "current_stock.csv")
+        items.append({"item_id": row["item_id"], "item_name": row["item_name"],
+                      "category": row["category"], "current_stock": stock,
+                      "reorder_point": reorder_point, "is_low": stock <= reorder_point})
+    return {"count": len(items), "category": category or "all",
+            "categories_available": categories, "items": items, "source": "current_stock.csv"}
+
+
+# ---------------------------------------------------------------------------
+# Tool 7: query_purchase_history  (MVP - User Story 6: questions about past purchases)
+# ---------------------------------------------------------------------------
+def _month(value, name: str) -> str | None:
+    """Validate a 'YYYY-MM' month string (or None)."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) != 7 or value[4] != "-" \
+            or not (value[:4].isdigit() and value[5:].isdigit()) or not 1 <= int(value[5:]) <= 12:
+        raise ToolError("INVALID_PARAMETER", f"{name} must look like 2025-03 (YYYY-MM)")
+    return value
+
+
+@_returns_errors_as_results
+def query_purchase_history(item: str, start_month: str | None = None,
+                           end_month: str | None = None) -> dict:
+    """
+    Past purchases of ONE item, optionally limited to a month range (inclusive).
+
+    item         item ID or name ("Bic Pens", "ITM001")
+    start_month  "YYYY-MM" or None (= from the first record)
+    end_month    "YYYY-MM" or None (= to the last record)
+    Reads: current_stock.csv (resolve item), past_purchases.csv
+    Returns every matching row plus exact totals computed here:
+      total_quantity, total_spend_ugx (= sum of quantity x historical unit price),
+      and data_range (first/last month that exists for this item), so the model can say
+      "that period is not in the data" instead of inventing numbers.
+    """
+    inventory = _read_csv("current_stock.csv")
+    row = _resolve_item(item, inventory)
+    start, end = _month(start_month, "start_month"), _month(end_month, "end_month")
+    if start and end and start > end:                 # 'YYYY-MM' strings sort like dates
+        raise ToolError("INVALID_PARAMETER", "start_month is after end_month")
+
+    all_rows = [r for r in _read_csv("past_purchases.csv") if r["item_id"] == row["item_id"]]
+    months_available = sorted(r["date"][:7] for r in all_rows)
+    selected = [r for r in all_rows
+                if (start is None or r["date"][:7] >= start) and (end is None or r["date"][:7] <= end)]
+    purchases = [{"date": r["date"],
+                  "quantity": _int(r, "quantity_purchased", "past_purchases.csv"),
+                  "unit_price_ugx": _int(r, "historical_unit_price_ugx", "past_purchases.csv")}
+                 for r in sorted(selected, key=lambda r: r["date"])]
+    result = {
+        "item_id": row["item_id"],
+        "item_name": row["item_name"],
+        "period": {"start_month": start, "end_month": end},
+        "data_range": ({"first_month": months_available[0], "last_month": months_available[-1]}
+                       if months_available else None),
+        "records_found": len(purchases),
+        "purchases": purchases,
+        "total_quantity": sum(p["quantity"] for p in purchases),
+        "total_spend_ugx": sum(p["quantity"] * p["unit_price_ugx"] for p in purchases),
+        "source": "past_purchases.csv",
+    }
+    if not all_rows:
+        result["note"] = "This item has no purchase history at all."
+    elif not purchases:
+        result["note"] = "No purchases recorded in the requested period (see data_range)."
+    return result

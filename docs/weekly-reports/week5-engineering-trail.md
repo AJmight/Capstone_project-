@@ -104,3 +104,22 @@ py tests\test_week5_agent.py --live                               # the 4 traces
 - Four live scenarios; Week 7 needs 30+ on the primary model.
 - Greedy budget planning is explainable but not always cost-optimal.
 - Next: Week 3 RAG (policy corpus, citations, 15 questions), then Week 6 (SQLite state, memory, MCP-style interface).
+
+---
+
+## 9. Update — 2026-10-06 (MVP session)
+
+What changed around the Week 5 agent, and proof that it still works:
+
+| Change | Effect on the restock agent |
+|:---|:---|
+| Prompt v2.2.1 → v2.3.0 → **v2.4.0** (new tools `get_inventory`, `query_purchase_history`, `search_policy`; policy-citation and clarifying-question rules; `UNKNOWN_CATEGORY` rule) | Section 7 (restock task) unchanged. The task allow-list still exposes only `get_low_stock`, `plan_within_budget`, `draft_requisition`, so the new tools cannot be used inside a restock run |
+| Draft lines now store `safety_cap` | Lets a human edit (`approvals.py edit`) re-check the 200 % cap |
+| `approvals.py edit` (User Story 9) | Owners can change a quantity on an agent-created draft before deciding; the AI suggestion is kept and the edit audited; `agent_checks` gets a note that the draft changed after the checks |
+| `src/app.py` console menu, option 2 | Runs `run_restock()` interactively |
+
+**Regression on prompt v2.4.0 (2026-10-06):** Week 5 traces **4/4** (T1 DRAFT_READY 1,619,289; T2 DRAFT_READY
+294,130; T3 fail → retry → RECOVERED → DRAFT_READY; T4 NOTHING_FITS_BUDGET), Week 5 offline **16/16**,
+Week 4 live **6/6**, Week 4 offline **22/22**. The traces in `evidence/week5/trace_T*.md` are from this run
+(models 3.5-flash and 3.5-flash-lite, because 3.8/3.7 had used their daily quota — the fallback chain
+carried the run). In Week 4 L-05 the viewer's model again tried `draft_requisition` and was blocked (F-07).

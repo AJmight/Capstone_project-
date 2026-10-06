@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-10-02T23:20:18+00:00",
+  "timestamp": "2026-10-06T03:13:39+00:00",
   "trace_name": "T3_failure_recovery",
   "outcome": "DRAFT_READY",
-  "final_text": "### Restock Summary\n\n- **Draft ID:** `REQ-20261002-232010-DF0B` (source: `draft_requisition`)\n  - **Rulers 30cm (ITM003):** 57 units | Supplier: Kampala Office Supplies | Line Total: UGX 53,466\n  - **Bic Pens (Blue) (ITM001):** 65 units | Supplier: Kampala Office Supplies | Line Total: UGX 30,940\n  - **Erasers (ITM005):** 63 units | Supplier: Kampala Office Supplies | Line Total: UGX 11,844\n  - **Files (Box) (ITM009):** 60 units | Supplier: Kampala Office Supplies | Line Total: UGX 197,880\n  - **Total Draft Cost:** UGX 294,130 out of UGX 300,000 budget (Remaining: UGX 5,870)\n\n- **Deferred (did not fit the budget):** (source: `plan_within_budget`)\n  - **A4 Printing Paper (Rim) (ITM006):** Would exceed budget (UGX 294,130 planned + UGX 602,239 > UGX 300,000)\n  - **Stapler Medium (ITM007):** Would exceed budget (UGX 96,250 planned + UGX 722,920 > UGX 300,000)\n\n- **Needs your decision:** (source: `plan_within_budget`)\n  - **Cellotape (Roll) (ITM011):** No purchase history \u2014 human must set quantity.\n  - **Glue Stick (ITM012):** No purchase history \u2014 human must set quantity.\n  - **Marker Pens (Black) (ITM013):** No purchase history \u2014 human must set quantity.\n  - **Calculator (Basic) (ITM015):** No purchase history \u2014 human must set quantity.\n\nStatus: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it.",
+  "final_text": "- **Draft:** REQ-20261006-031334-C68F\n  - Rulers 30cm: 57 units from Kampala Office Supplies \u2013 UGX 53,466 (source: draft_requisition)\n  - Bic Pens (Blue): 65 units from Kampala Office Supplies \u2013 UGX 30,940 (source: draft_requisition)\n  - Erasers: 63 units from Kampala Office Supplies \u2013 UGX 11,844 (source: draft_requisition)\n  - Files (Box): 60 units from Kampala Office Supplies \u2013 UGX 197,880 (source: draft_requisition)\n  - **Total vs Budget:** Estimated total UGX 294,130 against budget UGX 300,000 (remaining: UGX 5,870) (source: plan_within_budget)\n\n- **Deferred (did not fit the budget):**\n  - Stapler Medium (ITM007): Deferred because adding UGX 722,920 for 88 units would exceed the UGX 300,000 budget (source: plan_within_budget).\n  - A4 Printing Paper (Rim) (ITM006): Deferred because adding UGX 602,239 for 53 units would exceed the UGX 300,000 budget (source: plan_within_budget).\n\n- **Needs your decision:**\n  - Cellotape (Roll) (ITM011): No purchase history - human must set quantity (source: plan_within_budget).\n  - Glue Stick (ITM012): No purchase history - human must set quantity (source: plan_within_budget).\n  - Marker Pens (Black) (ITM013): No purchase history - human must set quantity (source: plan_within_budget).\n  - Calculator (Basic) (ITM015): No purchase history - human must set quantity (source: plan_within_budget).\n\nStatus: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it.",
   "state": {
     "goal": "Prepare ONE draft restock requisition within the budget and report everything that needs a human decision.",
     "budget_ugx": 300000,
@@ -163,8 +163,8 @@
       "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv"
     },
     "draft": {
-      "draft_id": "REQ-20261002-232010-DF0B",
-      "created_at": "2026-10-02T23:20:10+00:00",
+      "draft_id": "REQ-20261006-031334-C68F",
+      "created_at": "2026-10-06T03:13:34+00:00",
       "created_by": "Mwesigwa Arnold Mugahi",
       "status": "DRAFT - AWAITING HUMAN APPROVAL",
       "lines": [
@@ -181,7 +181,8 @@
           "lead_time_days": 3,
           "total_cost_ugx": 53466,
           "requires_override": false,
-          "override_reason": ""
+          "override_reason": "",
+          "safety_cap": 136
         },
         {
           "item_id": "ITM001",
@@ -196,7 +197,8 @@
           "lead_time_days": 3,
           "total_cost_ugx": 30940,
           "requires_override": false,
-          "override_reason": ""
+          "override_reason": "",
+          "safety_cap": 158
         },
         {
           "item_id": "ITM005",
@@ -211,7 +213,8 @@
           "lead_time_days": 3,
           "total_cost_ugx": 11844,
           "requires_override": false,
-          "override_reason": ""
+          "override_reason": "",
+          "safety_cap": 160
         },
         {
           "item_id": "ITM009",
@@ -226,7 +229,8 @@
           "lead_time_days": 3,
           "total_cost_ugx": 197880,
           "requires_override": false,
-          "override_reason": ""
+          "override_reason": "",
+          "safety_cap": 160
         }
       ],
       "skipped": [],
@@ -238,10 +242,10 @@
       "requires_override_any": false,
       "decision": null,
       "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
-      "saved_to": "data/drafts/REQ-20261002-232010-DF0B.json"
+      "saved_to": "data/drafts/REQ-20261006-031334-C68F.json"
     },
     "drafts_created": [
-      "REQ-20261002-232010-DF0B"
+      "REQ-20261006-031334-C68F"
     ],
     "failures": [
       {
@@ -273,112 +277,112 @@
     ],
     "timeline": [
       {
-        "t": "23:20:01",
+        "t": "03:13:29",
         "phase": "PRECONDITIONS",
         "detail": "ok"
       },
       {
-        "t": "23:20:01",
+        "t": "03:13:29",
         "phase": "SENSE",
         "detail": "10 low items: ['ITM001', 'ITM003', 'ITM005', 'ITM006', 'ITM007', 'ITM009', 'ITM011', 'ITM012', 'ITM013', 'ITM015']"
       },
       {
-        "t": "23:20:06",
+        "t": "03:13:32",
         "phase": "PLAN/DECIDE",
-        "detail": "turn 1 (gemini-3.6-flash) chose plan_within_budget"
+        "detail": "turn 1 (gemini-3.5-flash-lite) chose plan_within_budget"
       },
       {
-        "t": "23:20:06",
+        "t": "03:13:32",
         "phase": "ACT",
         "detail": "plan_within_budget(items=[ITM001, ITM003, ITM005, ITM006, ITM007, ITM009, ITM011, ITM012, ITM013, ITM015], budget_ugx=300000) -> tool_error"
       },
       {
-        "t": "23:20:06",
+        "t": "03:13:32",
         "phase": "OBSERVE",
         "detail": "error: SERVICE_UNAVAILABLE: the data service timed out; retry this call once [fault injected for testing]"
       },
       {
-        "t": "23:20:06",
+        "t": "03:13:32",
         "phase": "RE-PLAN",
         "detail": "temporary failure -> the contract allows ONE retry of the same call"
       },
       {
-        "t": "23:20:08",
+        "t": "03:13:33",
         "phase": "PLAN/DECIDE",
-        "detail": "turn 2 (gemini-3.6-flash) chose plan_within_budget"
+        "detail": "turn 2 (gemini-3.5-flash-lite) chose plan_within_budget"
       },
       {
-        "t": "23:20:08",
+        "t": "03:13:33",
         "phase": "ACT",
-        "detail": "plan_within_budget(budget_ugx=300000, items=[ITM001, ITM003, ITM005, ITM006, ITM007, ITM009, ITM011, ITM012, ITM013, ITM015]) -> ok"
+        "detail": "plan_within_budget(items=[ITM001, ITM003, ITM005, ITM006, ITM007, ITM009, ITM011, ITM012, ITM013, ITM015], budget_ugx=300000) -> ok"
       },
       {
-        "t": "23:20:08",
+        "t": "03:13:33",
         "phase": "RECOVERED",
         "detail": "plan_within_budget succeeded on retry"
       },
       {
-        "t": "23:20:08",
+        "t": "03:13:33",
         "phase": "OBSERVE",
         "detail": "plan: include ['ITM003', 'ITM001', 'ITM005', 'ITM009'] = UGX 294,130 of UGX 300,000; deferred ['ITM007', 'ITM006']; needs human ['ITM011', 'ITM012', 'ITM013', 'ITM015']"
       },
       {
-        "t": "23:20:08",
+        "t": "03:13:33",
         "phase": "RE-PLAN",
         "detail": "budget too small for all priced items -> 2 deferred, most urgent kept"
       },
       {
-        "t": "23:20:10",
+        "t": "03:13:34",
         "phase": "PLAN/DECIDE",
-        "detail": "turn 3 (gemini-3.6-flash) chose draft_requisition"
+        "detail": "turn 3 (gemini-3.5-flash-lite) chose draft_requisition"
       },
       {
-        "t": "23:20:10",
+        "t": "03:13:34",
         "phase": "ACT",
         "detail": "draft_requisition(items=[ITM003, ITM001, ITM005, ITM009]) -> ok"
       },
       {
-        "t": "23:20:10",
+        "t": "03:13:34",
         "phase": "OBSERVE",
-        "detail": "draft REQ-20261002-232010-DF0B with ['ITM003', 'ITM001', 'ITM005', 'ITM009'] = UGX 294,130, status DRAFT - AWAITING HUMAN APPROVAL"
+        "detail": "draft REQ-20261006-031334-C68F with ['ITM003', 'ITM001', 'ITM005', 'ITM009'] = UGX 294,130, status DRAFT - AWAITING HUMAN APPROVAL"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "PLAN/DECIDE",
-        "detail": "turn 4 (gemini-3.6-flash) wrote the final summary (no more tools)"
+        "detail": "turn 4 (gemini-3.5-flash-lite) wrote the final summary (no more tools)"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "POSTCONDITION",
-        "detail": "PASS - at most one draft per run: drafts: ['REQ-20261002-232010-DF0B']"
+        "detail": "PASS - at most one draft per run: drafts: ['REQ-20261006-031334-C68F']"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "POSTCONDITION",
         "detail": "PASS - plan made before drafting: plan_within_budget succeeded first"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "POSTCONDITION",
         "detail": "PASS - draft items == plan 'included' items: draft ['ITM001', 'ITM003', 'ITM005', 'ITM009'] vs plan ['ITM001', 'ITM003', 'ITM005', 'ITM009']"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "POSTCONDITION",
         "detail": "PASS - draft total within budget: UGX 294,130 <= UGX 300,000"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "POSTCONDITION",
         "detail": "PASS - draft status is DRAFT: DRAFT - AWAITING HUMAN APPROVAL"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "POSTCONDITION",
         "detail": "PASS - summary says it awaits human approval: status line present"
       },
       {
-        "t": "23:20:18",
+        "t": "03:13:39",
         "phase": "STOP",
         "detail": "outcome DRAFT_READY (loop stop reason: model_finished)"
       }
@@ -387,7 +391,7 @@
       {
         "check": "at most one draft per run",
         "passed": true,
-        "detail": "drafts: ['REQ-20261002-232010-DF0B']"
+        "detail": "drafts: ['REQ-20261006-031334-C68F']"
       },
       {
         "check": "plan made before drafting",
@@ -422,25 +426,25 @@
       "ITM015 Calculator (Basic): No purchase history - human must set quantity",
       "ITM007 Stapler Medium: deferred - would exceed budget: UGX 96,250 already planned + UGX 722,920 > UGX 300,000",
       "ITM006 A4 Printing Paper (Rim): deferred - would exceed budget: UGX 294,130 already planned + UGX 602,239 > UGX 300,000",
-      "Approve or reject REQ-20261002-232010-DF0B with src/approvals.py"
+      "Approve or reject REQ-20261006-031334-C68F with src/approvals.py"
     ],
     "outcome": "DRAFT_READY"
   },
   "loop": {
-    "run_id": "bc4bf2e6",
+    "run_id": "27a488bd",
     "stopped_reason": "model_finished",
     "turns_used": 4,
     "models_used": [
-      "gemini-3.6-flash",
-      "gemini-3.6-flash",
-      "gemini-3.6-flash",
-      "gemini-3.6-flash"
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash-lite"
     ],
-    "latency_s": 14.18,
+    "latency_s": 6.57,
     "steps": [
       {
         "turn": 1,
-        "model": "gemini-3.6-flash",
+        "model": "gemini-3.5-flash-lite",
         "model_text": "",
         "tool_requests": [
           {
@@ -465,13 +469,12 @@
       },
       {
         "turn": 2,
-        "model": "gemini-3.6-flash",
+        "model": "gemini-3.5-flash-lite",
         "model_text": "",
         "tool_requests": [
           {
             "name": "plan_within_budget",
             "args": {
-              "budget_ugx": 300000,
               "items": [
                 "ITM001",
                 "ITM003",
@@ -483,14 +486,15 @@
                 "ITM012",
                 "ITM013",
                 "ITM015"
-              ]
+              ],
+              "budget_ugx": 300000
             }
           }
         ]
       },
       {
         "turn": 3,
-        "model": "gemini-3.6-flash",
+        "model": "gemini-3.5-flash-lite",
         "model_text": "",
         "tool_requests": [
           {
@@ -508,8 +512,8 @@
       },
       {
         "turn": 4,
-        "model": "gemini-3.6-flash",
-        "model_text": "### Restock Summary\n\n- **Draft ID:** `REQ-20261002-232010-DF0B` (source: `draft_requisition`)\n  - **Rulers 30cm (ITM003):** 57 units | Supplier: Kampala Office Supplies | Line Total: UGX 53,466\n  - **Bic Pens (Blue) (ITM001):** 65 units | Supplier: Kampala Office Supplies | Line Total: UGX 30,940\n  - **Erasers (ITM005):** 63 units | Supplier: Kampala Office Supplies | Line Total: UGX 11,844\n  - **Files (Box) (ITM009):** 60 units | Supplier: Kampala Office Supplies | Line Total: UGX 197,880\n  - **Total Draft Cost:** UGX 294,130 out of UGX 300,000 budget (Remaining: UGX 5,870)\n\n- **Deferred (did not fit the budget):** (source: `plan_within_budget`)\n  - **A4 Printing Paper (Rim) (ITM006):** Would exceed budget (UGX 294,130 planned + UGX 602,239 > UGX 300,000)\n  - **Stapler Medium (ITM007):** Would exceed budget (UGX 96,250 planned + UGX 722,920 > UGX 300,000)\n\n- **Needs your decision:** (source: `plan_within_budget`)\n  - **Cellotape (Roll) (ITM011):** No purchase history \u2014 human must set quantity.\n  - **Glue Stick (ITM012):** No purchase history \u2014 human must set quantity.\n  - **Marker Pens (Black) (ITM013):** No purchase history \u2014 human must set quantity.\n  - **Calculator (Basic) (ITM015):** No purchase history \u2014 human must set quantity.\n\nStatus: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it.",
+        "model": "gemini-3.5-flash-lite",
+        "model_text": "- **Draft:** REQ-20261006-031334-C68F\n  - Rulers 30cm: 57 units from Kampala Office Supplies \u2013 UGX 53,466 (source: draft_requisition)\n  - Bic Pens (Blue): 65 units from Kampala Office Supplies \u2013 UGX 30,940 (source: draft_requisition)\n  - Erasers: 63 units from Kampala Office Supplies \u2013 UGX 11,844 (source: draft_requisition)\n  - Files (Box): 60 units from Kampala Office Supplies \u2013 UGX 197,880 (source: draft_requisition)\n  - **Total vs Budget:** Estimated total UGX 294,130 against budget UGX 300,000 (remaining: UGX 5,870) (source: plan_within_budget)\n\n- **Deferred (did not fit the budget):**\n  - Stapler Medium (ITM007): Deferred because adding UGX 722,920 for 88 units would exceed the UGX 300,000 budget (source: plan_within_budget).\n  - A4 Printing Paper (Rim) (ITM006): Deferred because adding UGX 602,239 for 53 units would exceed the UGX 300,000 budget (source: plan_within_budget).\n\n- **Needs your decision:**\n  - Cellotape (Roll) (ITM011): No purchase history - human must set quantity (source: plan_within_budget).\n  - Glue Stick (ITM012): No purchase history - human must set quantity (source: plan_within_budget).\n  - Marker Pens (Black) (ITM013): No purchase history - human must set quantity (source: plan_within_budget).\n  - Calculator (Basic) (ITM015): No purchase history - human must set quantity (source: plan_within_budget).\n\nStatus: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it.",
         "tool_requests": []
       }
     ],
@@ -542,7 +546,6 @@
         "turn": 2,
         "name": "plan_within_budget",
         "args": {
-          "budget_ugx": 300000,
           "items": [
             "ITM001",
             "ITM003",
@@ -554,7 +557,8 @@
             "ITM012",
             "ITM013",
             "ITM015"
-          ]
+          ],
+          "budget_ugx": 300000
         },
         "status": "ok",
         "result": {
@@ -662,8 +666,8 @@
         },
         "status": "ok",
         "result": {
-          "draft_id": "REQ-20261002-232010-DF0B",
-          "created_at": "2026-10-02T23:20:10+00:00",
+          "draft_id": "REQ-20261006-031334-C68F",
+          "created_at": "2026-10-06T03:13:34+00:00",
           "created_by": "Mwesigwa Arnold Mugahi",
           "status": "DRAFT - AWAITING HUMAN APPROVAL",
           "lines": [
@@ -680,7 +684,8 @@
               "lead_time_days": 3,
               "total_cost_ugx": 53466,
               "requires_override": false,
-              "override_reason": ""
+              "override_reason": "",
+              "safety_cap": 136
             },
             {
               "item_id": "ITM001",
@@ -695,7 +700,8 @@
               "lead_time_days": 3,
               "total_cost_ugx": 30940,
               "requires_override": false,
-              "override_reason": ""
+              "override_reason": "",
+              "safety_cap": 158
             },
             {
               "item_id": "ITM005",
@@ -710,7 +716,8 @@
               "lead_time_days": 3,
               "total_cost_ugx": 11844,
               "requires_override": false,
-              "override_reason": ""
+              "override_reason": "",
+              "safety_cap": 160
             },
             {
               "item_id": "ITM009",
@@ -725,7 +732,8 @@
               "lead_time_days": 3,
               "total_cost_ugx": 197880,
               "requires_override": false,
-              "override_reason": ""
+              "override_reason": "",
+              "safety_cap": 160
             }
           ],
           "skipped": [],
@@ -737,10 +745,11 @@
           "requires_override_any": false,
           "decision": null,
           "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
-          "saved_to": "data/drafts/REQ-20261002-232010-DF0B.json"
+          "saved_to": "data/drafts/REQ-20261006-031334-C68F.json"
         }
       }
-    ]
+    ],
+    "output_warnings": []
   },
   "limits": {
     "max_turns": 5,

@@ -41,7 +41,7 @@ so a viewer's model does not even know draft_requisition exists. The permission
 check in step 2 is a second, independent safety net (defence in depth).
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.1.0 (Week 5: plan_within_budget, number coercion, fault injection)
+Version: 1.2.0 (MVP: get_inventory, query_purchase_history, search_policy; maximum check)
 """
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ import time                                   # measure how long each tool takes
 from datetime import datetime, timezone       # trace timestamps
 from pathlib import Path                      # trace file path
 
-from tools import procurement                 # the four deterministic tool functions
+from tools import knowledge, procurement      # deterministic tool functions (CSV tools + policy search)
 
 TRACE_PATH = Path("evidence/week4/tool_traces.jsonl")
 
@@ -145,6 +145,51 @@ TOOL_REGISTRY = {
     },
 }
 
+# --- MVP / Week 3 read-only tools -------------------------------------------
+TOOL_REGISTRY["get_inventory"] = {
+    "function": procurement.get_inventory,
+    "permission": "read",
+    "declaration": {
+        "name": "get_inventory",
+        "description": ("List inventory items with current stock, reorder point and whether each is low. "
+                        "Optionally filter by category (Stationery, Office, Electronics)."),
+        "parameters_json_schema": {"type": "object", "properties": {
+            "category": {"type": "string", "description": "Optional category name; omit for all items."}},
+            "required": []},
+    },
+}
+TOOL_REGISTRY["query_purchase_history"] = {
+    "function": procurement.query_purchase_history,
+    "permission": "read",
+    "declaration": {
+        "name": "query_purchase_history",
+        "description": ("Past purchases of ONE item with exact totals (quantity and spend), optionally for a "
+                        "month range. Use for questions like 'how many pens did we buy in March 2025?'. "
+                        "Returns data_range so you can tell the user when a period has no data."),
+        "parameters_json_schema": {"type": "object", "properties": {
+            "item": _ITEM_PARAM,
+            "start_month": {"type": "string", "description": "First month, YYYY-MM (optional)."},
+            "end_month": {"type": "string", "description": "Last month, YYYY-MM (optional)."}},
+            "required": ["item"]},
+    },
+}
+TOOL_REGISTRY["search_policy"] = {
+    "function": knowledge.search_policy,
+    "permission": "read",
+    "declaration": {
+        "name": "search_policy",
+        "description": ("Search the shop's policy and procedure documents (approval limits, payments, "
+                        "supplier delivery/returns/terms, reorder guidelines, supplier pressure). Returns "
+                        "passages with source_id. Use it for ANY policy or process question and cite the "
+                        "source_id; never answer policy questions from memory."),
+        "parameters_json_schema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "The question or key words."},
+            "top_k": {"type": "integer", "minimum": 1, "maximum": 5,
+                      "description": "How many passages (default 3)."}},
+            "required": ["query"]},
+    },
+}
+
 # Error codes worth ONE retry of the same call (a temporary problem, not a wrong request).
 RETRYABLE_ERRORS = ("SERVICE_UNAVAILABLE",)
 
@@ -231,6 +276,8 @@ def _validate_args(name: str, args: dict, schema: dict) -> str | None:
                 return f"INVALID_PARAMETER: '{key}' must be integer, got bool"
             if value < spec.get("minimum", value):
                 return f"INVALID_PARAMETER: '{key}' must be at least {spec['minimum']}"
+            if value > spec.get("maximum", value):
+                return f"INVALID_PARAMETER: '{key}' must be at most {spec['maximum']}"
     return None
 
 

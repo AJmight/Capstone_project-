@@ -64,3 +64,12 @@ checks (permissions, output check, post-conditions) are what made the system saf
 - Live traces are four scenarios; Week 7 needs 30+ on the primary model.
 - Different models answered different turns; quality varies by model (recorded per turn in each trace).
 - `plan_within_budget` uses a simple greedy rule; it is explainable but not always the cost-optimal subset.
+
+## Regression — 2026-10-06 (prompt v2.4.0)
+
+| Suite | Result | Notes |
+|:---|:---:|:---|
+| Week 5 offline | 16/16 | unchanged |
+| Week 5 live traces T1–T4 | 4/4 | traces regenerated; models 3.5-flash / 3.5-flash-lite (3.8 and 3.7 out of daily quota) |
+| Week 4 offline | 22/22 | |
+| Week 4 live | 6/6 | L-05: viewer model tried `draft_requisition` again → blocked by the registry (F-07 recurring) |

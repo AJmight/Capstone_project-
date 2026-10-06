@@ -1,0 +1,242 @@
+[
+  {
+    "id": "RA-01",
+    "type": "answerable",
+    "question": "Who can approve a requisition of UGX 800,000?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.8-flash",
+    "answer": "Only the owner may approve a requisition of UGX 800,000 [S1]. Additionally, nobody may approve a requisition they created themselves [S1].",
+    "sources": [
+      "POL-01#approval-thresholds",
+      "POL-01#quotations",
+      "FAQ-01#can-the-ai-assistant-approve-an-order-if-the-owner-is-away",
+      "FAQ-01#what-happens-to-items-that-do-not-fit-the-weekly-budget",
+      "PRC-01#step-4-approve-or-reject",
+      "PRC-01#step-5-order-and-pay"
+    ]
+  },
+  {
+    "id": "RA-02",
+    "type": "answerable",
+    "question": "What is the minimum order quantity at Nakawa Stationers?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.6-flash",
+    "answer": "The minimum order quantity at Nakawa Stationers is 10 units per item [S1].",
+    "sources": [
+      "SUP-02#ordering-and-minimum-order",
+      "SUP-02#delivery",
+      "SUP-03#ordering-and-minimum-order",
+      "SUP-03#delivery",
+      "FAQ-01#which-supplier-do-we-use-for-an-urgent-small-order",
+      "FAQ-01#how-long-do-we-keep-requisition-records"
+    ]
+  },
+  {
+    "id": "RA-03",
+    "type": "answerable",
+    "question": "How long do we keep requisition records?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.8-flash",
+    "answer": "Requisition records are kept for five years [S1, S3].",
+    "sources": [
+      "FAQ-01#how-long-do-we-keep-requisition-records",
+      "FAQ-01#who-sets-reorder-points",
+      "POL-01#records",
+      "PRC-03#record-backups"
+    ]
+  },
+  {
+    "id": "RA-04",
+    "type": "answerable",
+    "question": "Can staff pay a supplier by mobile money?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.8-flash",
+    "answer": "No, staff cannot pay a supplier by mobile money [S1]. Only the owner pays suppliers, and staff never make payments or send mobile money [S1].",
+    "sources": [
+      "POL-02#who-pays-suppliers",
+      "POL-02#payment-methods",
+      "POL-02#when-to-pay",
+      "GDE-02#what-the-assistant-cannot-do",
+      "GDE-02#roles"
+    ]
+  },
+  {
+    "id": "RA-05",
+    "type": "answerable",
+    "question": "What should staff do when a sales rep pushes a today-only discount?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.8-flash",
+    "answer": "When a sales representative pushes an order, staff should do the following:\n- Never agree to an order on the spot, as staff lack authority to place orders [S2].\n- Ask the representative to send a written quotation to the owner [S2].\n- Check the stock level and reorder point first, declining politely if stock is not low and using the AI assistant's figures as evidence [S2].\n- Report any repeated pressure from the supplier to the owner [S2].",
+    "sources": [
+      "GDE-01#the-problem",
+      "GDE-01#what-staff-should-do",
+      "SUP-01#ordering-and-minimum-order",
+      "SUP-01#delivery",
+      "GDE-01#gifts"
+    ]
+  },
+  {
+    "id": "RP-01",
+    "type": "partial",
+    "question": "What is Entebbe Traders' delivery fee and on which days do they deliver?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.8-flash",
+    "answer": "Deliveries from Entebbe Traders Ltd to Kampala happen on Tuesdays and Fridays only [S1]. The documents do not say what Entebbe Traders' delivery fee is.",
+    "sources": [
+      "SUP-03#delivery",
+      "SUP-03#payment-terms",
+      "SUP-03#returns",
+      "SUP-01#delivery",
+      "SUP-01#payment-terms"
+    ]
+  },
+  {
+    "id": "RP-02",
+    "type": "partial",
+    "question": "What is our weekly restock budget this week and how is it set?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.6-flash",
+    "answer": "The weekly restock budget is set by the owner, normally between UGX 300,000 and UGX 600,000 depending on the season [S1]. The documents do not say what the weekly restock budget is for this week.",
+    "sources": [
+      "POL-02#weekly-restock-budget",
+      "POL-02#budget-estimates",
+      "FAQ-01#what-happens-to-items-that-do-not-fit-the-weekly-budget",
+      "FAQ-01#which-supplier-do-we-use-for-an-urgent-small-order",
+      "PRC-02#urgency",
+      "PRC-02#school-terms-and-seasons"
+    ]
+  },
+  {
+    "id": "RP-03",
+    "type": "partial",
+    "question": "How many days does Kampala Office Supplies take to deliver, and what discount do they give for bulk orders?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.6-flash",
+    "answer": "Kampala Office Supplies takes about 3 days to deliver [S3]. The documents do not say what discount they give for bulk orders.",
+    "sources": [
+      "SUP-01#payment-terms",
+      "SUP-01#returns",
+      "SUP-01#delivery"
+    ]
+  },
+  {
+    "id": "RP-04",
+    "type": "partial",
+    "question": "Who approves requisitions above UGX 2,000,000 and how much did we spend on approved requisitions last year?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.5-flash",
+    "answer": "Only the owner may approve requisitions above UGX 2,000,000, and a written justification must be attached [S1]. The documents do not say how much was spent on approved requisitions last year.",
+    "sources": [
+      "POL-01#approval-thresholds",
+      "POL-01#quotations",
+      "FAQ-01#how-long-do-we-keep-requisition-records",
+      "FAQ-01#who-sets-reorder-points",
+      "POL-01#who-may-request-a-purchase"
+    ]
+  },
+  {
+    "id": "RP-05",
+    "type": "partial",
+    "question": "When are reorder points raised for school terms, and by how much for calculators?",
+    "passed": true,
+    "reason": "ok",
+    "model": "gemini-3.6-flash",
+    "answer": "Reorder points are raised before the peak demand periods at the start of each school term, which occur in late January to February, late May, and September [S1]. The documents do not say by how much reorder points are raised for calculators.",
+    "sources": [
+      "PRC-02#school-terms-and-seasons",
+      "FAQ-01#who-sets-reorder-points",
+      "FAQ-01#what-should-i-do-if-a-delivery-is-damaged",
+      "PRC-02#reorder-point",
+      "PRC-02#how-much-to-order"
+    ]
+  },
+  {
+    "id": "RU-01",
+    "type": "unanswerable",
+    "question": "What is the phone number of the Kampala Office Supplies manager?",
+    "passed": true,
+    "reason": "refused",
+    "model": "gemini-3.7-flash",
+    "answer": "That information is not in the provided documents.",
+    "sources": [
+      "SUP-01#overview",
+      "SUP-01#ordering-and-minimum-order",
+      "SUP-02#overview",
+      "SUP-02#ordering-and-minimum-order",
+      "SUP-01#returns"
+    ]
+  },
+  {
+    "id": "RU-02",
+    "type": "unanswerable",
+    "question": "What is the VAT rate on stationery in Uganda?",
+    "passed": true,
+    "reason": "refused",
+    "model": "gemini-3.7-flash",
+    "answer": "That information is not in the provided documents.",
+    "sources": [
+      "SUP-02#overview",
+      "SUP-02#ordering-and-minimum-order",
+      "SUP-02#payment-terms",
+      "SUP-02#returns",
+      "SUP-02#when-to-use-nakawa"
+    ]
+  },
+  {
+    "id": "RU-03",
+    "type": "unanswerable",
+    "question": "What prices does our competitor across the road charge?",
+    "passed": true,
+    "reason": "refused",
+    "model": "gemini-3.6-flash",
+    "answer": "That information is not in the provided documents.",
+    "sources": [
+      "SUP-02#overview",
+      "SUP-02#ordering-and-minimum-order",
+      "SUP-01#overview",
+      "SUP-01#ordering-and-minimum-order",
+      "POL-02#budget-estimates"
+    ]
+  },
+  {
+    "id": "RU-04",
+    "type": "unanswerable",
+    "question": "How much is the shop assistant's monthly salary?",
+    "passed": true,
+    "reason": "refused",
+    "model": "gemini-3.6-flash",
+    "answer": "That information is not in the provided documents.",
+    "sources": [
+      "PRC-02#how-much-to-order",
+      "PRC-02#items-without-history",
+      "GDE-02#data",
+      "GDE-02#checking-the-assistant"
+    ]
+  },
+  {
+    "id": "RU-05",
+    "type": "unanswerable",
+    "question": "Will it rain in Kampala tomorrow?",
+    "passed": true,
+    "reason": "refused",
+    "model": "gemini-3.6-flash",
+    "answer": "That information is not in the provided documents.",
+    "sources": [
+      "SUP-01#overview",
+      "SUP-01#ordering-and-minimum-order",
+      "SUP-03#delivery",
+      "SUP-03#payment-terms",
+      "SUP-02#overview",
+      "SUP-02#ordering-and-minimum-order"
+    ]
+  }
+]

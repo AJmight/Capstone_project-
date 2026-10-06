@@ -1,0 +1,62 @@
+[
+  {
+    "id": "M-01",
+    "question": "Show me the stock levels for Office items.",
+    "expected": "get_inventory(Office); names Stapler Medium and Files (Box)",
+    "passed": true,
+    "tools": "get_inventory",
+    "models": "gemini-3.6-flash, gemini-3.6-flash",
+    "run_id": "8b7b7a31",
+    "answer": "Here are the current stock levels for the **Office** category (source: `get_inventory`):\n\n- **Stapler Medium** (ITM007): Current Stock: **3** | Reorder Point: 5 (**LOW STOCK**)\n- **Staple Pins (Box)** (ITM008): Current Stock: **40** | Reorder Point: 20\n- **Files (Box)** (ITM009): Current Stock: **6** | Reorder Point: 10 (**LOW STOCK**)\n- **Envelopes A4 (Pack)** (ITM010): Current Stock: **25** | Reorder Point: 15\n- **Cellotape (Roll)** (ITM011): Current Stock: **4** | Reorder Point: 10 (**LOW STOCK**)"
+  },
+  {
+    "id": "M-02",
+    "question": "How many Bic Pens did we buy from March to May 2025, and how much did we spend?",
+    "expected": "query_purchase_history; answer has 170 and 79,295",
+    "passed": true,
+    "tools": "query_purchase_history",
+    "models": "gemini-3.6-flash, gemini-3.6-flash",
+    "run_id": "5c2a9744",
+    "answer": "From March to May 2025, purchase history for **Bic Pens (Blue)** (ITM001) shows:\n\n* **Total Quantity Bought:** 170 units\n* **Total Amount Spent:** UGX 79,295\n\n**Monthly Breakdown:**\n* **March 2025:** 27 units at UGX 523 / unit\n* **April 2025:** 79 units at UGX 458 / unit\n* **May 2025:** 64 units at UGX 453 / unit\n\n*(source: query_purchase_history)*"
+  },
+  {
+    "id": "M-03",
+    "question": "Tell me about our purchases.",
+    "expected": "no tool call; asks one clarifying question (AC 6.2)",
+    "passed": true,
+    "tools": "",
+    "models": "gemini-3.6-flash",
+    "run_id": "ecaffc92",
+    "answer": "Which item or time period (month/year) would you like to view purchase history for?"
+  },
+  {
+    "id": "M-04",
+    "question": "Who is allowed to approve a requisition worth UGX 800,000?",
+    "expected": "search_policy; 'owner'; cites POL-01",
+    "passed": true,
+    "tools": "search_policy, search_policy",
+    "models": "gemini-3.5-flash, gemini-3.5-flash, gemini-3.5-flash",
+    "run_id": "a0cb9a67",
+    "answer": "Based on the shop's procurement policy:\n\n* **Only the owner** is allowed to approve a requisition worth UGX 800,000. \n* This is because requisitions valued **above UGX 500,000 and up to UGX 2,000,000** require the owner's approval (the shop supervisor can only approve requisitions up to UGX 500,000) (source: `POL-01#approval-thresholds`, `FAQ-01#can-the-ai-assistant-approve-an-order-if-the-owner-is-away`).\n* Additionally, **nobody may approve a requisition they created themselves** (source: `POL-01#approval-thresholds`)."
+  },
+  {
+    "id": "M-05",
+    "question": "How many rulers did we buy in November 2024?",
+    "expected": "query_purchase_history; says no records for that period; no invented number",
+    "passed": true,
+    "tools": "query_purchase_history",
+    "models": "gemini-3.5-flash, gemini-3.5-flash",
+    "run_id": "d2921f4a",
+    "answer": "Based on the purchase history records for **Rulers 30cm (ITM003)**:\n\n* **Quantity purchased in November 2024:** 0 units (spend: UGX 0)\n* **Note:** There are no purchases recorded for this period. The available purchase history data range is from January 2025 to December 2025 (source: `query_purchase_history`)."
+  },
+  {
+    "id": "M-06",
+    "question": "Show me inventory for dairy products.",
+    "expected": "explains dairy is not a category and lists Electronics, Office, Stationery",
+    "passed": true,
+    "tools": "get_inventory",
+    "models": "gemini-3.5-flash, gemini-3.5-flash-lite",
+    "run_id": "5c9fdd2d",
+    "answer": "That category does not exist. Available categories are: Electronics, Office, and Stationery."
+  }
+]

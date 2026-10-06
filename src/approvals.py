@@ -18,6 +18,10 @@ WHAT IT DOES
 ------------
   list                      show drafts in data/drafts/ and their status
   show <draft_id>           print one draft's lines and totals
+  edit <draft_id> --item ITM001 --qty 50 --by "Name" --reason "..."
+                            change one line's quantity BEFORE deciding (User Story 9): the AI's
+                            original suggestion and the reason are kept, totals and the 200% cap
+                            are recalculated in Python, and the edit is written to the audit log
   approve <draft_id> --by "Name" [--reason "..."]
   reject  <draft_id> --by "Name"  --reason "..."     (a reason is mandatory, AC 10.3)
 
@@ -36,7 +40,7 @@ Usage (PowerShell, from the repo root):
   py src\\approvals.py approve REQ-20261002-060439-887D --by "Shop Owner"
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.0.0 (Week 4)
+Version: 1.1.0 (MVP: edit quantities before approval, User Story 9)
 """
 
 # ---------------------------------------------------------------------------
@@ -124,12 +128,66 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "") -> d
 
 
 # ---------------------------------------------------------------------------
+# Editing a quantity before the decision (User Story 9)
+# ---------------------------------------------------------------------------
+def edit_quantity(draft_id: str, item_id: str, new_qty: int, edited_by: str, reason: str) -> dict:
+    """
+    Change the quantity of one line in a draft that is still awaiting approval.
+
+    AC 9.1: the requisition quantity is updated.
+    AC 9.2: the override and the original AI suggestion are logged (in the line and the audit log).
+    Totals, the +/-10% range and the 200% cap flag are recalculated here, never by the AI.
+    """
+    if not isinstance(new_qty, int) or isinstance(new_qty, bool) or new_qty < 0:
+        raise ApprovalError("the new quantity must be a whole number of 0 or more")
+    if not edited_by.strip() or not reason.strip():
+        raise ApprovalError("both --by and --reason are required to change a quantity (AC 9.2)")
+
+    draft = load_draft(draft_id)
+    if draft["status"] != procurement.DRAFT_STATUS:
+        raise ApprovalError(f"{draft_id} is already {draft['status']}; it can no longer be edited")
+    line = next((l for l in draft["lines"] if l["item_id"].upper() == item_id.upper()), None)
+    if line is None:
+        raise ApprovalError(f"{item_id} is not a line in {draft_id}")
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    old_qty = line["recommended_qty"]
+    line.setdefault("ai_suggested_qty", old_qty)                     # the AI's original, kept forever
+    line.setdefault("edits", []).append({"from": old_qty, "to": new_qty, "by": edited_by,
+                                         "at": now, "reason": reason})
+    line["recommended_qty"] = new_qty
+    line["total_cost_ugx"] = new_qty * line["unit_price_ugx"]       # exact integer maths
+    cap = line.get("safety_cap")
+    if cap is not None:                                              # re-check the 200% cap
+        line["requires_override"] = new_qty > cap
+        line["override_reason"] = (f"{new_qty} exceeds 200% cap of {cap}; human must justify"
+                                   if new_qty > cap else "")
+
+    total = sum(l["total_cost_ugx"] for l in draft["lines"])
+    draft["estimated_budget_ugx"] = total
+    draft["budget_range_ugx"] = {"low": (total * 9 + 5) // 10, "high": (total * 11 + 5) // 10}
+    draft["requires_override_any"] = any(l.get("requires_override") for l in draft["lines"])
+    if draft.get("agent_checks"):
+        draft["agent_checks"]["note"] = "draft edited by a human after the agent's checks"
+
+    (_drafts_dir() / f"{draft_id}.json").write_text(json.dumps(draft, indent=2), encoding="utf-8")
+    with (_drafts_dir() / AUDIT_LOG_NAME).open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"timestamp": now, "draft_id": draft_id, "decision": "EDITED",
+                            "item_id": line["item_id"], "from": old_qty, "to": new_qty,
+                            "ai_suggested_qty": line["ai_suggested_qty"], "decided_by": edited_by,
+                            "reason": reason, "estimated_budget_ugx": total}) + "\n")
+    return draft
+
+
+# ---------------------------------------------------------------------------
 # Command line
 # ---------------------------------------------------------------------------
 def _print_draft(d: dict) -> None:
     print(f"{d['draft_id']}  status: {d['status']}  created by {d['created_by']} at {d['created_at']}")
     for line in d["lines"]:
         flag = "  [OVER 200% CAP]" if line["requires_override"] else ""
+        if "ai_suggested_qty" in line:
+            flag += f"  [edited; AI suggested {line['ai_suggested_qty']}]"
         print(f"  {line['item_id']} {line['item_name']:<24} qty {line['recommended_qty']:>4} "
               f"x UGX {line['unit_price_ugx']:,} = UGX {line['total_cost_ugx']:,} "
               f"({line['selected_supplier']}){flag}")
@@ -145,6 +203,12 @@ def main() -> None:
     sub.add_parser("list")
     show = sub.add_parser("show")
     show.add_argument("draft_id")
+    edit = sub.add_parser("edit")
+    edit.add_argument("draft_id")
+    edit.add_argument("--item", required=True, help="item ID of the line, e.g. ITM001")
+    edit.add_argument("--qty", required=True, type=int, help="new quantity")
+    edit.add_argument("--by", required=True)
+    edit.add_argument("--reason", required=True)
     for name in ("approve", "reject"):
         p = sub.add_parser(name)
         p.add_argument("draft_id")
@@ -160,6 +224,10 @@ def main() -> None:
                       + ("  [needs override reason]" if d["requires_override_any"] else ""))
         elif args.command == "show":
             _print_draft(load_draft(args.draft_id))
+        elif args.command == "edit":
+            d = edit_quantity(args.draft_id, args.item, args.qty, args.by, args.reason)
+            _print_draft(d)
+            print(f"Edited {args.item} (recorded in {AUDIT_LOG_NAME}). The draft still needs a decision.")
         else:
             decision = "APPROVED" if args.command == "approve" else "REJECTED"
             _print_draft(load_draft(args.draft_id))

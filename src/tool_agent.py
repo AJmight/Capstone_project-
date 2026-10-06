@@ -78,7 +78,7 @@ from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations_for
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PROMPT_PATH = Path("prompts/procurement_assistant_v2.2.1.md")       # tool-mode prompt
+PROMPT_PATH = Path("prompts/procurement_assistant_v2.4.0.md")       # tool-mode prompt
 MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
 MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "12"))
 TRACE_PATH = Path("evidence/week4/agent_traces.jsonl")
