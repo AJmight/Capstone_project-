@@ -1,6 +1,6 @@
 # Week 5 Offline Agent Tests
 
-Run at 2026-10-13T18:23:26 | **17/17 passed**
+Run at 2026-10-13T18:43:18 | **17/17 passed**
 
 | id | test | passed | detail |
 |---|---|---|---|
@@ -15,9 +15,10 @@ Run at 2026-10-13T18:23:26 | **17/17 passed**
 | A-09 | compare_supplier_quotes is a real tool but not in this task's contract -> blocked. | **PASS** |  |
 | A-10 | Every model 503 -> HANDOFF_MODEL_UNAVAILABLE with a clear message; no draft. | **PASS** |  |
 | A-11 | If the summary omits 'AWAITING HUMAN APPROVAL', the run is not reported as ready. | **PASS** |  |
-| A-12 | Viewer role or a bad budget stops before any model call (fake would crash if called). | **PASS** |  |
+| A-12 | A bad budget (0, negative, not a whole number) stops before any model call (fake would crash if called).
+    (The old viewer-role precondition was removed with user roles on 2026-10-13.) | **PASS** |  |
 | A-13 | If nothing is low, SENSE stops the run (NOTHING_TO_DO) without spending model quota. | **PASS** |  |
 | A-14 | plan_within_budget: urgency order, skip-and-continue, needs_human, budget validation. | **PASS** |  |
 | A-15 | The Markdown trace has the phases a marker looks for. | **PASS** |  |
-| A-16 | F-13: a viewer's model writes a fake 'awaiting approval' summary -> code corrects and flags it. | **PASS** |  |
+| A-16 | F-13: the model writes a fake 'awaiting approval' summary without drafting -> code corrects and flags it. | **PASS** |  |
 | A-17 | A model asking for many different tool calls is cut off at MAX_TOOL_CALLS (LIMIT) -> HANDOFF. | **PASS** |  |

@@ -157,7 +157,7 @@ Earlier runs on older prompts are kept in `evidence/week5/runs_prompt_v2.1.0/` a
 
 | Part | Content |
 |:---|:---|
-| System instruction | `prompts/procurement_assistant_v2.4.0.md` between the markers (roles, tools, hard rules, Section 7) |
+| System instruction | `prompts/procurement_assistant_v2.5.0.md` between the markers (role of the assistant, tools, hard rules, Section 7) |
 | Tool declarations | only the 3 contract tools (`allowed_tools`), as JSON schemas |
 | Turn 1 user message | `[RESTOCK TASK]` goal + budget + requested-by + `[SENSE]` JSON of the 10 low items (built in `run_restock()` line 240 onwards) |
 | Following turns | the model's tool requests and the **tool results** (plan, draft) appended one by one |

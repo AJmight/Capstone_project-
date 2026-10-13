@@ -68,7 +68,7 @@ approve, order or pay**.
 
 ## 10. Human in the loop / human-on-the-loop
 **Idea:** people make the high-impact decisions.
-**In our system:** `src/approvals.py` (or app option 4): only the owner approves, rejects (with a reason)
+**In our system:** `src/approvals.py` (or app option 4): the shop's trusted user approves, rejects (with a reason)
 or edits quantities (the AI's original suggestion is kept). The AI has no route to this step.
 
 ## 11. State and memory
@@ -78,7 +78,7 @@ or edits quantities (the AI's original suggestion is kept). The AI has no route 
 
 ## 12. Guardrails and defence in depth
 **Idea:** several independent safety layers, so one failing layer doesn't cause harm.
-**Our layers:** the prompt's rules → tools shown only per role → registry permission check → argument
+**Our layers:** the prompt's rules → tool allow-list (no approve/order/pay tool exists) → argument
 validation → task allow-list → limits → post-conditions → output check → human approval.
 **Proof it matters:** F-07 (model called a tool it was never given → blocked), F-13 (model showed a
 fake "awaiting approval" draft → corrected by code).

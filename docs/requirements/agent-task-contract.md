@@ -8,6 +8,8 @@
 | **Model-facing part** | `prompts/procurement_assistant_v2.2.1.md`, Section 7 |
 | **Tests / traces** | `tests/test_week5_agent.py` (16 offline + 4 live), `evidence/week5/trace_T*.md` |
 
+> **Updated 2026-10-13 — single trusted user:** user roles (viewer/staff/owner) were removed; see `docs/requirements/decision-001-single-trusted-user.md`.
+
 ## 1. Goal
 
 > Prepare **one** draft restock requisition for this week that stays **within the budget**, and report
@@ -23,7 +25,6 @@ single prompt or a single tool call cannot handle all of these branches.
 | Input | Rule | If violated |
 |:---|:---|:---|
 | `budget_ugx` | positive whole number of UGX | `PRECONDITION_FAILED` |
-| `role` | must have the `draft` permission (staff, owner) | `PRECONDITION_FAILED` |
 | `user_name` | recorded as `created_by` on the draft (from the session, never from the model) | — |
 | Inventory data | `get_low_stock` must succeed | `HANDOFF_SENSE_FAILED` |
 | Something to do | at least one low item | `NOTHING_TO_DO` (no model call) |
@@ -36,14 +37,14 @@ single prompt or a single tool call cannot handle all of these branches.
 | `plan_within_budget` | PLAN: which low items fit the budget (most urgent first) | none |
 | `draft_requisition` | ACT: create the draft from the plan's `included` items | writes `data/drafts/<id>.json` |
 
-Any other tool — even one the role could normally use, like `compare_supplier_quotes` — is blocked with
+Any other tool — even a real one like `compare_supplier_quotes` — is blocked with
 `NOT_IN_TASK_CONTRACT`. There is no approve/order/pay tool anywhere in the system.
 
 ## 4. State (explicit, `AgentState` in `restock_agent.py`)
 
 | Field | Set by | Meaning |
 |:---|:---|:---|
-| `goal`, `budget_ugx`, `role`, `user_name` | start | the task |
+| `goal`, `budget_ugx`, `user_name` | start | the task |
 | `phase` | every step | PRECONDITIONS, SENSE, PLAN/DECIDE, ACT, OBSERVE, RE-PLAN, RECOVERED, POSTCONDITION, STOP |
 | `low_items` | SENSE | items at/below reorder point |
 | `plan` | OBSERVE after `plan_within_budget` | included / deferred / needs_human / totals |
@@ -102,7 +103,7 @@ claim a draft or draft ID that was not created in the run (failure F-13).
 | `DRAFT_READY` | draft created and all post-conditions pass | approve/reject in `approvals.py`; decide `needs_human` and deferred items |
 | `NOTHING_FITS_BUDGET` | plan included nothing; no draft | raise the budget or buy manually |
 | `NOTHING_TO_DO` | no low items | none |
-| `PRECONDITION_FAILED` | bad budget or role | fix input / use a permitted account |
+| `PRECONDITION_FAILED` | bad budget | fix the input |
 | `POSTCONDITION_FAILED` | the agent's output broke a rule | reject the draft; investigate the trace |
 | `HANDOFF_ITERATION_LIMIT` / `HANDOFF_TOOL_CALL_LIMIT` | limits reached | do it manually or retry |
 | `HANDOFF_MODEL_UNAVAILABLE` | every model failed | retry later |

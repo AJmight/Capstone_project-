@@ -1,7 +1,7 @@
 # Prompt Version History — SME Procurement Assistant
 
 Current prompts:
-- **Tool mode:** `prompts/procurement_assistant_v2.4.0.md` (loaded by `src/tool_agent.py` and `src/restock_agent.py`)
+- **Tool mode:** `prompts/procurement_assistant_v2.5.0.md` (loaded by `src/tool_agent.py` and `src/restock_agent.py`)
 - **RAG:** `prompts/policy_qa_v1.0.0.md` (loaded by `src/rag/policy_qa.py`, Week 3)
 - **Context mode:** `prompts/procurement_assistant_v1.2.0.md` (loaded by `src/ai_engine.py`, Week 2 baseline)
 
@@ -17,10 +17,17 @@ Older versions are kept unchanged in `prompts/archive/`.
 | 2.2.0 | `archive/procurement_assistant_v2.2.0.md` | Week 4 regression 6/6; traces 4/4 but T4 needed the code output check (F-14) |
 | 2.2.1 | `archive/procurement_assistant_v2.2.1.md` | T4 clean — `docs/evaluation/week5-agent-evaluation.md` |
 | 2.3.0 | `archive/procurement_assistant_v2.3.0.md` | MVP live 4/6 (M-05 test error, M-06 → F-16) |
-| 2.4.0 | `procurement_assistant_v2.4.0.md` | MVP live 6/6; Week 4 live 6/6; Week 5 traces 4/4 |
+| 2.4.0 | `archive/procurement_assistant_v2.4.0.md` | MVP live 6/6; Week 4 live 6/6; Week 5 traces 4/4 |
+| 2.5.0 | `procurement_assistant_v2.5.0.md` | see `docs/requirements/decision-001-single-trusted-user.md` (regression results added there) |
 | policy_qa 1.0.0 | `policy_qa_v1.0.0.md` | RAG answers 15/15 — `docs/evaluation/week3-rag-evaluation.md` |
 
 ---
+
+## v2.5.0 — 2026-10-13
+
+User roles removed (single trusted user per shop, decision-001): no role wording; refusals explain that the user
+approves drafts themselves in the approval step; `UNAUTHORIZED_TOOL` / `NOT_IN_TASK_CONTRACT` → "not available in
+this system"; figures looked up without a draft are labelled "information only".
 
 ## v2.4.0 — 2026-10-06
 

@@ -16,7 +16,7 @@ All automated evidence in one table. Offline suites are free and deterministic; 
 
 ## MVP live cases
 
-| Case | Question (role viewer) | Tools | Result |
+| Case | Question (run as viewer before roles were removed on 2026-10-13) | Tools | Result |
 |:---|:---|:---|:---:|
 | M-01 | Show me the stock levels for Office items | `get_inventory` | PASS |
 | M-02 | How many Bic Pens did we buy from March to May 2025, and how much did we spend? | `query_purchase_history` | PASS — 170 units, UGX 79,295 |

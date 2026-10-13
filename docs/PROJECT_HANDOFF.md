@@ -70,8 +70,8 @@ Chat sessions are used for multi-turn memory; they do not avoid 503s.
 | File | Purpose |
 |:---|:---|
 | `src/tools/procurement.py` | 4 deterministic tools: `get_low_stock`, `compare_supplier_quotes`, `estimate_reorder_quantity`, `draft_requisition` (saves `data/drafts/REQ-*.json`, git-ignored) |
-| `src/tools/registry.py` | `execute_tool()`: allow-list → role (viewer/staff/owner) → argument validation → `created_by` injected → safe run → `evidence/week4/tool_traces.jsonl` |
-| `src/tool_agent.py` | `run_agent(question, role, user_name)`: bounded loop (6 turns, 12 tool calls), AFC off, role-filtered tools, fallback via `call_with_fallback`, run trace `evidence/week4/agent_traces.jsonl` |
+| `src/tools/registry.py` | `execute_tool()`: allow-list → argument validation → `created_by` injected → safe run → `evidence/week4/tool_traces.jsonl` |
+| `src/tool_agent.py` | `run_agent(question, user_name)`: bounded loop (6 turns, 12 tool calls), AFC off, fallback via `call_with_fallback`, run trace `evidence/week4/agent_traces.jsonl` |
 | `src/approvals.py` | Human-only approve/reject CLI with typed confirmation and `data/drafts/audit_log.jsonl`; NOT a tool |
 | `prompts/procurement_assistant_v2.4.0.md` | Tool-mode prompt (v1.2.0 stays for `ai_engine.py`; v2.0.0–v2.3.0 in `archive/`) |
 | `tests/test_week4_tools.py` | 22 offline (no model) + 6 live tests |
@@ -83,7 +83,7 @@ Results: offline 22/22, live 6/6. **F-04 closed.** New: F-07 (model requested a 
 
 | File | Purpose |
 |:---|:---|
-| `src/restock_agent.py` | `run_restock(budget, user_name, role, save_trace_as)`: preconditions → SENSE (code) → bounded loop (5 turns, 6 tool calls, 3-tool task allow-list) → post-conditions → outcome decided by code (DRAFT_READY, NOTHING_FITS_BUDGET, NOTHING_TO_DO, PRECONDITION_FAILED, POSTCONDITION_FAILED, HANDOFF_*) |
+| `src/restock_agent.py` | `run_restock(budget, user_name, save_trace_as)`: preconditions → SENSE (code) → bounded loop (5 turns, 6 tool calls, 3-tool task allow-list) → post-conditions → outcome decided by code (DRAFT_READY, NOTHING_FITS_BUDGET, NOTHING_TO_DO, PRECONDITION_FAILED, POSTCONDITION_FAILED, HANDOFF_*) |
 | `src/tools/procurement.py` `plan_within_budget` | Tool 5: urgency order (stock/reorder point), greedy skip-and-continue within budget; included / deferred / needs_human |
 | `src/tool_agent.py` v1.2.0 | + per-turn steps, repeated-call guard (one retry after SERVICE_UNAVAILABLE), `allowed_tools`, observer hook, `check_output()` against false draft claims |
 | `src/tools/registry.py` v1.1.0 | + whole-float → int, `minimum`, fault injection (`inject_fault`, `AGENT_FAULTS`, marked `injected`) |
@@ -117,6 +117,13 @@ Failures: R-1…R-5 (R-4 open: numeric ranges in keyword search), F-16 fixed. Su
 - `docs/requirements/data-protection-and-multi-user.md` — leakage analysis (provider, cross-session, cross-user, cross-tenant, logs) and the per-tenant RAG/storage plan for Weeks 6–7.
 - `docs/team/task-board.md` / `.csv` — 30 cards for the remaining weeks; README "Team roles and what to do next".
 - Week 5 offline test A-17 (tool-call limit) → 17/17.
+
+## 6f. Decision 2026-10-13 — single trusted user
+
+User roles removed everywhere (code, tests, prompt **v2.5.0**, corpus GDE-02/POL-01, current docs). The AI still
+cannot approve/order/pay (no tool); approval stays a human step. Cross-user leakage = **cross-shop** (one shop's
+data reaching another shop's session) — the isolation plan is in `data-protection-and-multi-user.md`.
+Record: `docs/requirements/decision-001-single-trusted-user.md`.
 
 ## 7. Known issues
 

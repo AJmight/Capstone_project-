@@ -349,7 +349,7 @@ def draft_requisition(items: list[str], created_by: str = "unknown") -> dict:
 
     items       list of item IDs or names chosen by the model, e.g. ["ITM001", "Rulers 30cm"]
     created_by  the logged-in user. Filled in by registry.py from the session,
-                NEVER by the model (so the AI cannot pretend to be the owner).
+                NEVER by the model (so the AI cannot claim to be someone else).
 
     Rules applied:
       - only LOW items get a line; well-stocked items go to "skipped" with the reason

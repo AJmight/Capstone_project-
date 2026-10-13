@@ -4,27 +4,24 @@
 |:---|:---|
 | **Version** | 1.2 (MVP 2026-10-06: tools 6–8 `get_inventory`, `query_purchase_history`, `search_policy`) |
 | **Owner** | Mwesigwa Arnold Mugahi (AI Engineering Lead) |
-| **Code** | `src/tools/procurement.py` (functions), `src/tools/registry.py` (allow-list, permissions, executor) |
+| **Code** | `src/tools/procurement.py` (functions), `src/tools/registry.py` (allow-list, argument validation, executor) |
 | **Machine-readable schemas** | `docs/requirements/tool-schemas.json` (exported from the code) |
 | **Tests** | `tests/test_week4_tools.py` (22 offline + 6 live), `tests/test_week5_agent.py` (16 offline + 4 live traces) |
 
 ## How a tool call works
 
-1. `src/tool_agent.py` sends the user's question and the **declarations of the tools the user's role may use** to Gemini.
+1. `src/tool_agent.py` sends the user's question and the **declarations of the tools** (all of them, or a task's allow-list) to Gemini.
 2. Gemini replies with a function call, e.g. `estimate_reorder_quantity(item="Rulers 30cm")`.
-3. `registry.execute_tool()` checks **allow-list → role permission → arguments**, injects trusted context (`created_by`), runs the Python function, catches crashes, and writes a trace line.
+3. `registry.execute_tool()` checks **allow-list → arguments**, injects trusted context (`created_by`), runs the Python function, catches crashes, and writes a trace line.
 4. The result dictionary goes back to Gemini, which explains it. **Every number comes from Python.**
 
-## Roles and permissions
+## Who can use the tools
 
-| Role | Permissions | Tools shown to the model |
-|:---|:---|:---|
-| `viewer` | read | the 7 read tools (all except `draft_requisition`) |
-| `staff` | read, draft | all eight |
-| `owner` | read, draft | all eight |
-| any other | none | none |
+There are **no user roles** (decision 2026-10-13, `decision-001-single-trusted-user.md`): the shop's trusted
+user has access to all eight tools through the agent. Each tool carries a `side_effect` note — seven have
+`none`, `draft_requisition` `writes a draft file`.
 
-**No role can approve, order or pay through the AI**: those tools do not exist. Approval is a human
+**Nothing can approve, order or pay through the AI**: those tools do not exist. Approval is a human
 action in `src/approvals.py` (see the end of this document).
 
 ## Tool 1 — `get_low_stock`
@@ -127,7 +124,6 @@ budget, ±10 % range and the 200 % cap flag; appends an `EDITED` entry to `audit
 | Code | When | Status in trace |
 |:---|:---|:---|
 | `UNAUTHORIZED_TOOL` | tool name not on the allow-list (e.g. `approve_requisition`) | blocked |
-| `UNAUTHORIZED` | role lacks the tool's permission | blocked |
 | `MISSING_PARAMETER` | required argument absent | invalid |
 | `INVALID_PARAMETER` | unknown argument, wrong type, empty string/list, too many items | invalid |
 | `TOOL_ERROR` | the Python function crashed | crashed |
@@ -158,6 +154,6 @@ manual and outside the system.
 
 | File | One line per | Contents |
 |:---|:---|:---|
-| `evidence/week4/tool_traces.jsonl` | tool call | time, run_id, tool, role, args, status, latency, result |
-| `evidence/week4/agent_traces.jsonl` | agent run | question, role, limits, models per turn, all tool calls, final answer, stop reason |
+| `evidence/week4/tool_traces.jsonl` | tool call | time, run_id, tool, user, args, status, latency, result |
+| `evidence/week4/agent_traces.jsonl` | agent run | question, user, limits, models per turn, all tool calls, final answer, stop reason |
 | `evidence/traces/llm_calls.jsonl` | model call | models tried, errors, latency (no text) |

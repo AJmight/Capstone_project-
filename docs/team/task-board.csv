@@ -40,14 +40,14 @@ AP-1 Review the app layer,Application / Integration Lead,2026-10-14,To Do,"revie
 - write UI requirements (pages, roles)
 - choose framework (Streamlit is simplest)"
 AP-2 Web UI: core pages,Application / Integration Lead,2026-10-18,To Do,week-7,"Checklist:
-- login screen (name + password, role from storage — coordinate with AI-2)
+- login screen (name + password, linked to the user's shop — coordinate with AI-2)
 - Chat page → `run_agent()`
 - Weekly restock page → `run_restock()` with timeline
 - Policy Q&A page → `answer_policy_question()` with sources
 - Stock page → `get_inventory()`"
 "AP-3 Pending-approval page (US 10, AC 10.1)",Application / Integration Lead,2026-10-19,To Do,week-7,"Checklist:
 - list drafts awaiting approval
-- owner-only edit / approve / reject using `approvals.edit_quantity()` and `approvals.decide()`
+- edit / approve / reject (typed confirmation) using `approvals.edit_quantity()` and `approvals.decide()`
 - reason required for reject and over-cap lines"
 AP-4 Evidence view for the demo,Application / Integration Lead,2026-10-21,To Do,week-8,"Checklist:
 - page showing the last run's trace (tools, models, stop reason) — brief §10 ""engineering evidence view"""
@@ -90,7 +90,7 @@ QA-3 Evaluation runner + metrics,Quality / Security Lead,2026-10-19,To Do,week-7
 - rubric instead of brittle keyword checks"
 QA-4 Red-team session,Quality / Security Lead,2026-10-19,To Do,week-7,"Checklist:
 - prompt injection (in messages and in documents)
-- role abuse (viewer trying to draft/approve)
+- attempts to make the AI approve, order or pay; requests for another shop's data
 - log every finding"
 QA-5 Failure catalogue (≥ 5 genuine failures),Quality / Security Lead,2026-10-20,To Do,week-7,"Checklist:
 - add to `docs/evaluation/` with root cause, fix and re-test evidence (format of `week3-rag-evaluation.md`)"

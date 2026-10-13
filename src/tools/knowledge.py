@@ -7,7 +7,7 @@ Gives the Week 4/5 agents the same policy search as the RAG pipeline
 like "who approves UGX 800,000?" from the shop's documents and cite the
 source IDs (e.g. POL-01#approval-thresholds) instead of guessing.
 
-Registered in src/tools/registry.py with permission "read".
+Registered in src/tools/registry.py (read-only: no side effect).
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
 Version: 1.0.0

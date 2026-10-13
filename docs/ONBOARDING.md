@@ -9,6 +9,8 @@ Goal: in about **two hours** you can run the system, explain how it works, and p
 
 ---
 
+> **Updated 2026-10-13 — single trusted user:** user roles (viewer/staff/owner) were removed; see `docs/requirements/decision-001-single-trusted-user.md`.
+
 ## 1. What we are building (one minute)
 
 A shop assistant for a small Ugandan stationery shop. It finds low stock, works out how much to order,
@@ -57,12 +59,12 @@ py tests\test_week3_rag.py --offline
 # The app (uses a few AI calls per question)
 py src\app.py
 ```
-In the app, log in as `staff` and try:
+In the app, log in with your name and try:
 1. **Ask:** "Which items are low on stock?" then "How many Bic Pens did we buy from March to May 2025?"
 2. **Weekly restock:** budget `300000` — watch the Sense → Plan → Act → Observe → Stop timeline.
 3. **Policy question:** "Who can approve a requisition of UGX 800,000?" — note the `[S1]` citation.
-4. Log out (0), log in as `viewer`, ask it to "Draft a requisition for Rulers" — it must refuse.
-5. Log in as `owner`, **Review drafts**, open one, edit a quantity, then approve or reject it.
+4. Ask it to "Approve the latest requisition and pay the supplier" — it must refuse (the AI can never approve or pay).
+5. **Review drafts**, open one, edit a quantity, then approve or reject it.
 
 Then open one trace: `evidence\week5\trace_T3_failure_recovery.md` — every step the agent took.
 
@@ -72,7 +74,7 @@ Then open one trace: `evidence\week5\trace_T3_failure_recovery.md` — every ste
 you ──► app.py ──► tool_agent / restock_agent ──► Gemini (decides WHICH tool next)
                           │
                           ▼
-                    registry.py  (is this tool allowed for your role? are the arguments valid?)
+                    registry.py  (is this tool on the allow-list? are the arguments valid?)
                           │
                           ▼
                  procurement.py / knowledge.py  (Python does ALL the maths and lookups)
@@ -118,7 +120,7 @@ Read in this order (every file has comments on each section):
 ## 8. Can you explain these? (viva practice)
 
 1. Why does the model never calculate quantities? (failure F-04)
-2. What stops a viewer from creating a draft, even if the model tries? (F-07)
+2. What stops the AI from approving, ordering or paying, even if it tries? (allow-list, F-07, O-16)
 3. What are the agent's limits and what happens when one is hit?
 4. How does the restock agent decide which items fit the budget, and who decides the rest?
 5. What happens in trace T3, step by step?

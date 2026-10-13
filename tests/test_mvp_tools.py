@@ -84,11 +84,11 @@ def test_offline_04_history_empty_and_invalid():
 
 
 def test_offline_05_search_policy_tool():
-    """search_policy via the registry returns source IDs; viewers may use it; bad top_k rejected."""
+    """search_policy via the registry returns source IDs; bad top_k rejected."""
     with sandbox():
-        r, status = registry.execute_tool("search_policy", {"query": "minimum order Nakawa"}, "viewer")
+        r, status = registry.execute_tool("search_policy", {"query": "minimum order Nakawa"})
         assert status == "ok" and r["results"][0]["source_id"] == "SUP-02#ordering-and-minimum-order"
-        r, status = registry.execute_tool("search_policy", {"query": "x", "top_k": 9}, "viewer")
+        r, status = registry.execute_tool("search_policy", {"query": "x", "top_k": 9})
         assert status == "invalid"
 
 
@@ -151,27 +151,27 @@ def _tools(run):
 
 
 LIVE = [
-    {"id": "M-01", "role": "viewer", "q": "Show me the stock levels for Office items.",
+    {"id": "M-01", "q": "Show me the stock levels for Office items.",
      "expected": "get_inventory(Office); names Stapler Medium and Files (Box)",
      "check": lambda r: "get_inventory" in _tools(r) and "Stapler" in r["final_text"] and "Files" in r["final_text"]},
-    {"id": "M-02", "role": "viewer", "q": "How many Bic Pens did we buy from March to May 2025, and how much did we spend?",
+    {"id": "M-02", "q": "How many Bic Pens did we buy from March to May 2025, and how much did we spend?",
      "expected": f"query_purchase_history; answer has {EXPECTED_QTY} and {EXPECTED_SPEND:,}",
      "check": lambda r: "query_purchase_history" in _tools(r) and str(EXPECTED_QTY) in r["final_text"]
                         and (f"{EXPECTED_SPEND:,}" in r["final_text"] or str(EXPECTED_SPEND) in r["final_text"])},
-    {"id": "M-03", "role": "viewer", "q": "Tell me about our purchases.",
+    {"id": "M-03", "q": "Tell me about our purchases.",
      "expected": "no tool call; asks one clarifying question (AC 6.2)",
      "check": lambda r: not r["tool_calls"] and "?" in r["final_text"]},
-    {"id": "M-04", "role": "viewer", "q": "Who is allowed to approve a requisition worth UGX 800,000?",
+    {"id": "M-04", "q": "Who is allowed to approve a requisition worth UGX 800,000?",
      "expected": "search_policy; 'owner'; cites POL-01",
      "check": lambda r: "search_policy" in _tools(r) and "owner" in r["final_text"].lower() and "POL-01" in r["final_text"]},
-    {"id": "M-05", "role": "viewer", "q": "How many rulers did we buy in November 2024?",
+    {"id": "M-05", "q": "How many rulers did we buy in November 2024?",
      "expected": "query_purchase_history; says no records for that period; no invented number",
      "check": lambda r: "query_purchase_history" in _tools(r)
                         # Run 1 answered correctly ("0 purchases recorded ... history covers 2025-01 to 2025-12")
                         # but the keyword list missed it; accept the data_range mention too (test fix).
                         and any(w in r["final_text"].lower() for w in ("no record", "no purchases", "not in",
                                                                        "no data", "0 purchases", "2025-01"))},
-    {"id": "M-06", "role": "viewer", "q": "Show me inventory for dairy products.",
+    {"id": "M-06", "q": "Show me inventory for dairy products.",
      "expected": "explains dairy is not a category and lists Electronics, Office, Stationery",
      "check": lambda r: all(c in r["final_text"] for c in ("Electronics", "Office", "Stationery"))},
 ]
@@ -183,7 +183,7 @@ def run_live(delay_s: float = 3):
     results = []
     for case in LIVE:
         try:
-            run = run_agent(case["q"], role=case["role"], user_name=f"test-{case['id']}")
+            run = run_agent(case["q"], user_name=f"test-{case['id']}")
             ok = bool(case["check"](run))
         except Exception as e:
             run, ok = {"final_text": f"{type(e).__name__}: {e}", "tool_calls": [], "models_used": [],

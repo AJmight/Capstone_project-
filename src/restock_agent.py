@@ -14,11 +14,11 @@ docs/requirements/agent-task-contract.md.
 
 THE LOOP (Sense -> Plan/Decide -> Act -> Observe -> Stop/Re-plan)
 -----------------------------------------------------------------
-  0. PRECONDITIONS  (code)  role may draft? budget a positive whole number?
+  0. PRECONDITIONS  (code)  budget a positive whole number?
   1. SENSE          (code)  get_low_stock through the registry -> state.low_items
                             nothing low -> stop NOTHING_TO_DO (no model call needed)
   2. PLAN / DECIDE  (model) reads the goal + SENSE block, chooses the next tool
-  3. ACT            (code)  registry runs the tool (allow-list, permissions, validation)
+  3. ACT            (code)  registry runs the tool (allow-list, argument validation)
   4. OBSERVE        (code)  observe() updates the explicit AgentState after every result
      RE-PLAN                budget too small -> plan drops items (deferred); a temporary
                             failure -> one retry (recovery)
@@ -49,7 +49,7 @@ Usage (PowerShell, repo root):
   py src\\restock_agent.py --budget 300000 --save-trace T2_budget_replan
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.0.0 (Week 5)
+Version: 1.1.0 (single trusted user: role precondition removed)
 """
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ from datetime import datetime, timezone       # timestamps
 from pathlib import Path                      # file paths
 
 from tools import procurement                 # DRAFT_STATUS, DRAFTS_DIR
-from tools.registry import ROLE_PERMISSIONS, execute_tool
+from tools.registry import execute_tool
 from tool_agent import run_agent              # the bounded model <-> tool loop (Week 4, extended)
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,6 @@ RUNS_LOG = OUT_DIR / "restock_runs.jsonl"
 class AgentState:
     goal: str
     budget_ugx: int
-    role: str
     user_name: str
     phase: str = "START"                                  # START, SENSE, PLAN, DECIDE, ACT, OBSERVE, STOP
     low_items: list = field(default_factory=list)         # from SENSE (get_low_stock)
@@ -205,16 +204,14 @@ def _handoffs(state: AgentState) -> list[str]:
 # ---------------------------------------------------------------------------
 # The agent run
 # ---------------------------------------------------------------------------
-def run_restock(budget_ugx: int, user_name: str = "staff user", role: str = "staff",
+def run_restock(budget_ugx: int, user_name: str = "shop user",
                 save_trace_as: str | None = None) -> dict:
     """Run the weekly restock task once. Returns the full run record (also logged)."""
-    state = AgentState(goal=GOAL, budget_ugx=budget_ugx, role=role, user_name=user_name)
+    state = AgentState(goal=GOAL, budget_ugx=budget_ugx, user_name=user_name)
     run, final_text = None, ""
 
     # ---- 0. PRECONDITIONS (code) ----
     problems = []
-    if "draft" not in ROLE_PERMISSIONS.get(role, set()):
-        problems.append(f"role '{role}' may not create drafts")
     if not isinstance(budget_ugx, int) or isinstance(budget_ugx, bool) or budget_ugx <= 0:
         problems.append("budget must be a positive whole number of UGX")
     state.log("PRECONDITIONS", "ok" if not problems else "; ".join(problems))
@@ -223,8 +220,8 @@ def run_restock(budget_ugx: int, user_name: str = "staff user", role: str = "sta
         state.outcome = "PRECONDITION_FAILED"
         final_text = "Cannot start the restock task: " + "; ".join(problems) + "."
     else:
-        # ---- 1. SENSE (code, through the registry so it is traced and permission-checked) ----
-        sense, status = execute_tool("get_low_stock", {}, role, run_id="sense")
+        # ---- 1. SENSE (code, through the registry so it is traced and validated) ----
+        sense, status = execute_tool("get_low_stock", {}, run_id="sense")
         if "error" in sense:
             state.log("SENSE", f"failed: {sense['error']}")
             state.outcome = "HANDOFF_SENSE_FAILED"
@@ -240,7 +237,7 @@ def run_restock(budget_ugx: int, user_name: str = "staff user", role: str = "sta
         # ---- 2-4. PLAN/DECIDE -> ACT -> OBSERVE loop (model + registry) ----
         message = (f"[RESTOCK TASK]\nGoal: {GOAL}\nBudget: UGX {budget_ugx:,} (budget_ugx={budget_ugx})\n"
                    f"Requested by: {user_name}\n\n[SENSE]\n" + json.dumps(state.low_items, indent=1))
-        run = run_agent(message, role=role, user_name=user_name, max_turns=MAX_TURNS,
+        run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
                         max_tool_calls=MAX_TOOL_CALLS, on_tool_result=state.observe,
                         trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS)
         final_text = run["final_text"]
@@ -312,7 +309,7 @@ def render_trace_md(record: dict) -> str:
         f"| Time (UTC) | {record['timestamp']} |",
         f"| Goal | {s['goal']} |",
         f"| Budget | UGX {s['budget_ugx']:,} |",
-        f"| Role / user | {s['role']} / {s['user_name']} |",
+        f"| User | {s['user_name']} |",
         f"| Limits | {record['limits']['max_turns']} turns, {record['limits']['max_tool_calls']} tool calls, "
         f"tools {', '.join(record['limits']['tools'])} |",
         f"| Models used per turn | {', '.join(loop.get('models_used', [])) or '-'} |",
@@ -339,12 +336,11 @@ def render_trace_md(record: dict) -> str:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Weekly restock agent (Week 5)")
     ap.add_argument("--budget", type=int, required=True, help="budget in UGX, e.g. 300000")
-    ap.add_argument("--user", default="staff user")
-    ap.add_argument("--role", default="staff", choices=["viewer", "staff", "owner"])
+    ap.add_argument("--user", default="shop user")
     ap.add_argument("--save-trace", default=None, help="name for evidence/week5/trace_<name>.md")
     a = ap.parse_args()
 
-    rec = run_restock(a.budget, user_name=a.user, role=a.role, save_trace_as=a.save_trace)
+    rec = run_restock(a.budget, user_name=a.user, save_trace_as=a.save_trace)
     for e in rec["state"]["timeline"]:
         print(f"{e['t']}  {e['phase']:<14} {e['detail']}")
     print(f"\nOUTCOME: {rec['outcome']}\n")

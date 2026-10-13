@@ -27,7 +27,7 @@ and record provenance."
 | PRC-02 | `PRC-02_reorder-guidelines.md` | Reorder Guidelines | reorder point, the 1.5-month formula, items without history, urgency, **school-term +30 %** | ✓ same formula as tools |
 | PRC-03 | `PRC-03_stock-counting-and-storage.md` | Stock Counting and Storage | Saturday counts, monthly count, 5 % discrepancy rule, storage against water damage, backups | n/a |
 | GDE-01 | `GDE-01_handling-supplier-pressure.md` | Handling Supplier Pressure | what junior staff do when sales reps push; no gifts | n/a |
-| GDE-02 | `GDE-02_ai-assistant-usage-rules.md` | Rules for Using the AI Assistant | what the assistant can/cannot do; roles; checking its numbers | ✓ same roles as registry |
+| GDE-02 | `GDE-02_ai-assistant-usage-rules.md` | Rules for Using the AI Assistant | what the assistant can/cannot do; who uses it (single trusted user); checking its numbers | ✓ matches decision-001 |
 | FAQ-01 | `FAQ-01_procurement-faq.md` | Procurement FAQ | owner away, deferred items, urgent supplier, retention, damaged delivery, cash | n/a |
 | REF-01 | `REF-01_data-dictionary.md` | Data Dictionary | meaning of every CSV column; draft ID format | ✓ |
 
@@ -41,3 +41,4 @@ bulk discounts, Entebbe Traders' delivery fee, this week's exact budget, last ye
 | Date | Change | By |
 |:---|:---|:---|
 | 2026-10-06 | Initial 12 documents | Mwesigwa Arnold Mugahi |
+| 2026-10-13 | GDE-02 "Roles" section replaced by "Who uses the assistant" (single trusted user); POL-01 self-approval sentence replaced (decision-001) | Mwesigwa Arnold Mugahi |

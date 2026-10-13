@@ -4,7 +4,7 @@ Consolidated on 2026-10-06 from the Week 1 document `User stories and acceptance
 (repository root). The original stories used examples such as sugar, dairy and cooking oil; our synthetic
 data is a stationery shop, so examples are aligned with the data. Status shows what the MVP implements.
 
-**Roles:** Procurement Officer = staff; Shop Owner/Manager = owner; Viewer = read-only staff.
+**Users:** the stories name a Procurement Officer and a Shop Owner/Manager; in the system these are the **same trusted user** (no roles — decision-001, 2026-10-13).
 
 | # | Story | Acceptance criteria (aligned) | Status | Implemented by / evidence |
 |:---:|:---|:---|:---:|:---|

@@ -17,6 +17,6 @@ system as built. Columns: what the **AI** does, what **code** enforces, what a *
 | Approval | **Never** (no tool exists; refuses) | Requires typed confirmation; reasons for reject/over-cap; audit log | **Approves or rejects** | `approvals.decide` |
 | Ordering / payment | **Never** (refuses) | No integration exists | Places order and pays outside the system | — |
 | Safety cap 200 % | Points out flagged lines | Flags `requires_override` | Justifies or rejects | `_reorder_calculation`, `approvals` |
-| Permissions | — | Role allow-list per tool; task allow-list; parameter validation | Assigns roles | `registry.execute_tool`, `tool_agent` |
+| Access & tool control | — | Tool allow-list; task allow-list; parameter validation (no user roles — single trusted user, decision-001) | Controls who has access to the system | `registry.execute_tool`, `tool_agent` |
 | Limits & stopping | Chooses next step within limits | Max turns/tool calls, repeat guard, post-conditions, outcome | Takes over on hand-off | `tool_agent`, `restock_agent` |
 | Audit | — | Tool, agent, model-call and approval traces | Reviews traces | `evidence/`, `data/drafts/audit_log.jsonl` |

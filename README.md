@@ -11,6 +11,8 @@ order, pay or contact suppliers** — a human approves every requisition. We bui
 synthetic CSV data.
 
 > AI supports, never decides.
+>
+> One trusted user per shop (no user roles): the person using the system reviews and approves the AI's drafts.
 
 **New to the project? Start with [`docs/ONBOARDING.md`](docs/ONBOARDING.md), then find your role in
 [Team roles and what to do next](#team-roles-and-what-to-do-next).** AI assistants: read [`AGENTS.md`](AGENTS.md).
@@ -49,7 +51,7 @@ py tests\test_week2_cases.py      # 10 prompt test cases -> evidence\week2\
 
 # Week 4: tool-calling agent
 py src\tool_agent.py "Which items are low on stock?"
-py src\tool_agent.py "Draft a requisition for Bic Pens" --role staff --user "Your Name"
+py src\tool_agent.py "Draft a requisition for Bic Pens" --user "Your Name"
 py src\approvals.py list                       # HUMAN approval gate (the AI cannot approve)
 py src\approvals.py approve REQ-... --by "Your Name"
 py tests\test_week4_tools.py --offline         # 22 tool tests, no model quota used
@@ -79,7 +81,7 @@ py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 | `src/llm_client.py` | Shared Gemini client: primary model + automatic fallback chain, timeouts, call traces |
 | `src/ai_engine.py` | Week 2 context mode: loads the versioned prompt and CSVs, calls the model, parses JSON |
 | `src/tools/procurement.py` | Week 4: four deterministic tools (all maths happens here) |
-| `src/tools/registry.py` | Week 4: allow-list, role permissions, argument validation, tool traces |
+| `src/tools/registry.py` | Week 4: allow-list, argument validation, trusted context, tool traces |
 | `src/tool_agent.py` | Week 4: bounded tool-calling loop (model decides, Python computes) |
 | `src/approvals.py` | Week 4: human-only approve/reject of drafts, with audit log |
 | `src/restock_agent.py` | Week 5: bounded goal-directed agent (weekly restock within a budget) |
@@ -154,7 +156,7 @@ full checklists in [`docs/team/task-board.md`](docs/team/task-board.md) (importa
 - [ ] QA-1 Run and review all existing tests; log gaps as issues (15 Oct)
 - [ ] QA-2 30+ evaluation scenarios incl. leakage and unauthorised-action cases (18 Oct)
 - [ ] QA-3 Evaluation runner with metrics and a scoring rubric (19 Oct)
-- [ ] QA-4 Red-team session: prompt injection, role abuse (19 Oct)
+- [ ] QA-4 Red-team session: prompt injection, attempts to make the AI approve/order/pay, cross-shop data requests (19 Oct)
 - [ ] QA-5 Failure catalogue: ≥ 5 genuine failures with re-tests (20 Oct)
 
 ### DevOps / Documentation Lead

@@ -13,7 +13,7 @@ Every requisition needs human approval before any order is placed.
 - Up to UGX 500,000: the shop supervisor or the owner may approve.
 - Above UGX 500,000 and up to UGX 2,000,000: only the owner may approve.
 - Above UGX 2,000,000: only the owner may approve, and a written justification must be attached.
-Nobody may approve a requisition they created themselves.
+A draft prepared by the AI assistant is never an approval: the person using the system must review and approve it.
 
 ## Quotations
 For any item costing more than UGX 100,000 in one requisition, compare at least two written supplier quotations. The cheapest suitable quote should normally be chosen. Choosing a more expensive supplier needs a written reason, for example faster delivery when stock has run out.

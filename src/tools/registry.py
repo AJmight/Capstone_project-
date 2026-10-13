@@ -10,14 +10,14 @@ function directly. src/tool_agent.py hands the request to execute_tool()
 below, which runs these checks IN ORDER:
 
   1. ALLOW-LIST     Is the tool name in TOOL_REGISTRY?      no -> UNAUTHORIZED_TOOL
-  2. PERMISSION     Does the user's role allow this tool?    no -> UNAUTHORIZED
-  3. PARAMETERS     Are the arguments exactly what the schema says?
+                    (there is no approve / order / pay tool, so the AI can never do those)
+  2. PARAMETERS     Are the arguments exactly what the schema says?
                     missing -> MISSING_PARAMETER, wrong/extra -> INVALID_PARAMETER
-  4. CONTEXT        Values the model must never choose (who the user is) are
-                    added here from the session, never from the model.
-  5. RUN SAFELY     Any crash inside the tool -> TOOL_ERROR;
+  3. CONTEXT        Values the model must never choose (who the user is; later,
+                    which shop) are added here from the session, never from the model.
+  4. RUN SAFELY     Any crash inside the tool -> TOOL_ERROR;
                     a non-dictionary result  -> UNEXPECTED_RESPONSE
-  6. TRACE          Every call (allowed or blocked) is appended to
+  5. TRACE          Every call (allowed or blocked) is appended to
                     evidence/week4/tool_traces.jsonl
 
 FAULT INJECTION (testing only, Week 5)
@@ -29,19 +29,20 @@ fail with "SERVICE_UNAVAILABLE" (as if a data service timed out):
 It is OFF unless one of those is used, and every injected failure is marked
 "injected": true in the trace so evidence is never misleading.
 
-ROLES (who may do what)
------------------------
-  viewer  read-only tools                    (e.g. a junior staff member checking stock)
-  staff   read tools + draft_requisition     (default for the shop assistant)
-  owner   read tools + draft_requisition     (owner APPROVES outside the AI, in approvals.py)
-Nobody - not even "owner" - gets an approve/order/pay tool, because none exists.
+WHO USES THE TOOLS (no user roles - decision 2026-10-13)
+--------------------------------------------------------
+In a small shop the person using the system is normally the owner, who reviews and
+approves. Anyone with access to the system is trusted, so there are NO user roles
+(an earlier viewer/staff/owner design was removed; see
+docs/requirements/decision-001-single-trusted-user.md). The checks above protect
+against the AI misbehaving, not against the user.
 
-The model is also only SHOWN the tools its role may use (tool_declarations_for),
-so a viewer's model does not even know draft_requisition exists. The permission
-check in step 2 is a second, independent safety net (defence in depth).
+What still separates people is the SHOP: one shop's data must never reach another
+shop's session. That is done by trusted context (step 3) - planned for Week 6 as a
+shop_id injected from the login, exactly like created_by today.
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.2.0 (MVP: get_inventory, query_purchase_history, search_policy; maximum check)
+Version: 1.3.0 (single trusted user: user roles removed)
 """
 
 # ---------------------------------------------------------------------------
@@ -70,7 +71,7 @@ _ITEM_PARAM = {
 TOOL_REGISTRY = {
     "get_low_stock": {
         "function": procurement.get_low_stock,
-        "permission": "read",
+        "side_effect": "none",
         "declaration": {
             "name": "get_low_stock",
             "description": ("List every inventory item whose current_stock is at or below its "
@@ -81,7 +82,7 @@ TOOL_REGISTRY = {
     },
     "compare_supplier_quotes": {
         "function": procurement.compare_supplier_quotes,
-        "permission": "read",
+        "side_effect": "none",
         "declaration": {
             "name": "compare_supplier_quotes",
             "description": ("Return all supplier quotes for ONE item sorted cheapest first "
@@ -92,7 +93,7 @@ TOOL_REGISTRY = {
     },
     "estimate_reorder_quantity": {
         "function": procurement.estimate_reorder_quantity,
-        "permission": "read",
+        "side_effect": "none",
         "declaration": {
             "name": "estimate_reorder_quantity",
             "description": ("Compute the exact recommended reorder quantity for ONE item from its "
@@ -105,8 +106,8 @@ TOOL_REGISTRY = {
     },
     "draft_requisition": {
         "function": procurement.draft_requisition,
-        "permission": "draft",
-        "context_args": ["created_by"],       # filled from the session in step 4, never by the model
+        "side_effect": "writes a draft file",
+        "context_args": ["created_by"],       # filled from the session in step 3, never by the model
         "declaration": {
             "name": "draft_requisition",
             "description": ("Create and save a DRAFT purchase requisition for the listed items. "
@@ -124,7 +125,7 @@ TOOL_REGISTRY = {
     },
     "plan_within_budget": {
         "function": procurement.plan_within_budget,
-        "permission": "read",                 # read-only: it plans, it writes nothing
+        "side_effect": "none",                # read-only: it plans, it writes nothing
         "declaration": {
             "name": "plan_within_budget",
             "description": ("Decide which low-stock items fit a budget, most urgent first "
@@ -148,7 +149,7 @@ TOOL_REGISTRY = {
 # --- MVP / Week 3 read-only tools -------------------------------------------
 TOOL_REGISTRY["get_inventory"] = {
     "function": procurement.get_inventory,
-    "permission": "read",
+    "side_effect": "none",
     "declaration": {
         "name": "get_inventory",
         "description": ("List inventory items with current stock, reorder point and whether each is low. "
@@ -160,7 +161,7 @@ TOOL_REGISTRY["get_inventory"] = {
 }
 TOOL_REGISTRY["query_purchase_history"] = {
     "function": procurement.query_purchase_history,
-    "permission": "read",
+    "side_effect": "none",
     "declaration": {
         "name": "query_purchase_history",
         "description": ("Past purchases of ONE item with exact totals (quantity and spend), optionally for a "
@@ -175,7 +176,7 @@ TOOL_REGISTRY["query_purchase_history"] = {
 }
 TOOL_REGISTRY["search_policy"] = {
     "function": knowledge.search_policy,
-    "permission": "read",
+    "side_effect": "none",
     "declaration": {
         "name": "search_policy",
         "description": ("Search the shop's policy and procedure documents (approval limits, payments, "
@@ -215,13 +216,6 @@ def _load_env_faults() -> None:
 
 _load_env_faults()
 
-# Which permissions each role has. A role not listed here has no permissions at all.
-ROLE_PERMISSIONS = {
-    "viewer": {"read"},
-    "staff": {"read", "draft"},
-    "owner": {"read", "draft"},
-}
-
 # JSON Schema type names -> the Python types we accept for them.
 _PY_TYPES = {"string": str, "array": list, "object": dict, "integer": int, "boolean": bool}
 
@@ -229,14 +223,13 @@ _PY_TYPES = {"string": str, "array": list, "object": dict, "integer": int, "bool
 # ---------------------------------------------------------------------------
 # What the model is allowed to see
 # ---------------------------------------------------------------------------
-def tool_declarations_for(role: str) -> list[dict]:
-    """Declarations of only the tools this role may use (least privilege)."""
-    allowed = ROLE_PERMISSIONS.get(role, set())
-    return [spec["declaration"] for spec in TOOL_REGISTRY.values() if spec["permission"] in allowed]
+def tool_declarations() -> list[dict]:
+    """Declarations of every registered tool (the agent may further limit them per task)."""
+    return [spec["declaration"] for spec in TOOL_REGISTRY.values()]
 
 
 # ---------------------------------------------------------------------------
-# Argument validation (step 3)
+# Argument validation (step 2)
 # ---------------------------------------------------------------------------
 def _validate_args(name: str, args: dict, schema: dict) -> str | None:
     """
@@ -282,7 +275,7 @@ def _validate_args(name: str, args: dict, schema: dict) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Trace (step 6)
+# Trace (step 5)
 # ---------------------------------------------------------------------------
 def _trace(record: dict) -> None:
     """Append one JSON line per tool call. Logging problems never stop the agent."""
@@ -301,14 +294,13 @@ class _InjectedFault(Exception):
 # ---------------------------------------------------------------------------
 # The executor: the ONLY way the agent runs a tool
 # ---------------------------------------------------------------------------
-def execute_tool(name: str, args: dict | None, role: str, context: dict | None = None,
+def execute_tool(name: str, args: dict | None, context: dict | None = None,
                  run_id: str = "") -> tuple[dict, str]:
     """
     Run one tool request from the model, safely.
 
     name    tool name the model asked for
     args    arguments the model sent (may be None)
-    role    the session user's role: viewer | staff | owner
     context trusted values from the session, e.g. {"created_by": "Arnold"}
     run_id  agent run ID, written to the trace so calls can be grouped
 
@@ -323,16 +315,14 @@ def execute_tool(name: str, args: dict | None, role: str, context: dict | None =
     spec = TOOL_REGISTRY.get(name)
     if spec is None:                                                       # step 1
         result, status = {"error": f"UNAUTHORIZED_TOOL: '{name}' is not on the allow-list"}, "blocked"
-    elif spec["permission"] not in ROLE_PERMISSIONS.get(role, set()):     # step 2
-        result, status = {"error": f"UNAUTHORIZED: role '{role}' may not use {name}"}, "blocked"
     else:
-        problem = _validate_args(name, args, spec["declaration"]["parameters_json_schema"])  # step 3
+        problem = _validate_args(name, args, spec["declaration"]["parameters_json_schema"])  # step 2
         if problem:
             result, status = {"error": problem}, "invalid"
         else:
-            # Step 4: add trusted context values (e.g. created_by) that the model never controls.
+            # Step 3: add trusted context values (e.g. created_by) that the model never controls.
             trusted = {k: context[k] for k in spec.get("context_args", []) if k in context}
-            try:                                                           # step 5
+            try:                                                           # step 4
                 if _FAULTS.get(name, 0) > 0:
                     # TESTING ONLY: simulate a temporary outage (see module docstring).
                     _FAULTS[name] -= 1
@@ -350,11 +340,11 @@ def execute_tool(name: str, args: dict | None, role: str, context: dict | None =
             except Exception as e:                                         # a bug inside the tool
                 result, status = {"error": f"TOOL_ERROR: {type(e).__name__}: {e}"}, "crashed"
 
-    _trace({                                                               # step 6
+    _trace({                                                               # step 5
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "run_id": run_id,
         "tool": name,
-        "role": role,
+        "user": context.get("created_by"),
         "args": args,
         "status": status,
         "latency_ms": round((time.monotonic() - started) * 1000, 1),

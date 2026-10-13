@@ -6,23 +6,19 @@ gate → core execution → data, with a blocked boundary to payments and suppli
 ```mermaid
 flowchart TB
     subgraph USERS["People"]
-        O[Shop owner<br/>approves]
-        S[Staff<br/>asks, drafts]
-        V[Viewer<br/>read-only]
+        O[Shop owner / trusted user<br/>asks, reviews, approves]
     end
 
     subgraph SYS["SME Procurement Support Agent (this project)"]
         UI["User layer<br/>src/app.py console (web UI planned)"]
         GATE["Human approval gate<br/>src/approvals.py"]
-        CORE["Core execution<br/>tool_agent / restock_agent (bounded agents)<br/>registry (permissions) · tools (all maths) · RAG"]
+        CORE["Core execution<br/>tool_agent / restock_agent (bounded agents)<br/>registry (allow-list) · tools (all maths) · RAG"]
         DATA[("Synthetic data<br/>data/*.csv · knowledge/corpus · data/drafts")]
     end
 
     G["Google Gemini API<br/>(external, 6-model fallback)"]
     X["Payments, mobile money,<br/>banks, supplier ordering"]
 
-    S --> UI
-    V --> UI
     O --> UI
     O --> GATE
     UI --> CORE
@@ -31,6 +27,9 @@ flowchart TB
     GATE <--> DATA
     CORE -. "BLOCKED: no integration, agent refuses" .-x X
 ```
+
+One trusted user per shop, no user roles (decision-001). When several shops use the system, each shop is
+isolated from the others (planned, `data-protection-and-multi-user.md`).
 
 | Boundary | Rule |
 |:---|:---|

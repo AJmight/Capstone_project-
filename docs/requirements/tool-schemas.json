@@ -1,21 +1,9 @@
 {
   "generated_from": "src/tools/registry.py TOOL_REGISTRY",
-  "roles": {
-    "viewer": [
-      "read"
-    ],
-    "staff": [
-      "draft",
-      "read"
-    ],
-    "owner": [
-      "draft",
-      "read"
-    ]
-  },
+  "users": "single trusted user per shop, no roles (decision-001)",
   "tools": [
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "get_low_stock",
       "description": "List every inventory item whose current_stock is at or below its reorder_point, with item IDs. Use it to answer 'what is low?' and to find item IDs before drafting.",
@@ -26,7 +14,7 @@
       }
     },
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "compare_supplier_quotes",
       "description": "Return all supplier quotes for ONE item sorted cheapest first (ties broken by shorter lead time), with minimum order quantities.",
@@ -44,7 +32,7 @@
       }
     },
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "estimate_reorder_quantity",
       "description": "Compute the exact recommended reorder quantity for ONE item from its purchase history (1.5 months of average demand minus current stock, rounded up, raised to supplier minimum order), with the working and the 200% safety-cap check. Always use this instead of doing arithmetic.",
@@ -62,7 +50,7 @@
       }
     },
     {
-      "permission": "draft",
+      "side_effect": "writes a draft file",
       "context_args_injected_by_system": [
         "created_by"
       ],
@@ -88,7 +76,7 @@
       }
     },
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "plan_within_budget",
       "description": "Decide which low-stock items fit a budget, most urgent first (stock / reorder point). Returns 'included' items to draft, 'deferred' items that do not fit, and 'needs_human' items that cannot be costed (no purchase history or no quote). Writes nothing.",
@@ -117,7 +105,7 @@
       }
     },
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "get_inventory",
       "description": "List inventory items with current stock, reorder point and whether each is low. Optionally filter by category (Stationery, Office, Electronics).",
@@ -133,7 +121,7 @@
       }
     },
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "query_purchase_history",
       "description": "Past purchases of ONE item with exact totals (quantity and spend), optionally for a month range. Use for questions like 'how many pens did we buy in March 2025?'. Returns data_range so you can tell the user when a period has no data.",
@@ -159,7 +147,7 @@
       }
     },
     {
-      "permission": "read",
+      "side_effect": "none",
       "context_args_injected_by_system": [],
       "name": "search_policy",
       "description": "Search the shop's policy and procedure documents (approval limits, payments, supplier delivery/returns/terms, reorder guidelines, supplier pressure). Returns passages with source_id. Use it for ANY policy or process question and cite the source_id; never answer policy questions from memory.",

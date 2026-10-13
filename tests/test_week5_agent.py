@@ -14,9 +14,9 @@ manners) enforces the contract:
     off-contract model     -> compare_supplier_quotes blocked (NOT_IN_TASK_CONTRACT)
     model unavailable      -> HANDOFF_MODEL_UNAVAILABLE
     forgetful model        -> summary without the approval status line -> POSTCONDITION_FAILED
-    false draft claim      -> viewer shown a fake "awaiting approval" summary -> corrected (F-13)
+    false draft claim      -> fake "awaiting approval" summary with no draft -> corrected (F-13)
     tool-hungry model      -> cut off after MAX_TOOL_CALLS executions -> HANDOFF_TOOL_CALL_LIMIT
-    viewer role / bad budget / nothing low -> stop before any model call
+    bad budget / nothing low -> stop before any model call
 
 LIVE (real Gemini, about 3-4 requests per trace): the four Week 5 execution traces
     T1 happy path, T2 budget re-plan, T3 failure + recovery (fault injected), T4 safe stop.
@@ -279,12 +279,13 @@ def test_offline_11_summary_must_mention_approval():
 
 
 def test_offline_12_preconditions_no_model_call():
-    """Viewer role or a bad budget stops before any model call (fake would crash if called)."""
+    """A bad budget (0, negative, not a whole number) stops before any model call (fake would crash if called).
+    (The old viewer-role precondition was removed with user roles on 2026-10-13.)"""
     def must_not_be_called(contents):
         raise AssertionError("model was called")
     with sandbox(), fake_model(must_not_be_called):
-        assert restock_agent.run_restock(300000, role="viewer")["outcome"] == "PRECONDITION_FAILED"
-        assert restock_agent.run_restock(0)["outcome"] == "PRECONDITION_FAILED"
+        for bad in (0, -5, 2.5):
+            assert restock_agent.run_restock(bad)["outcome"] == "PRECONDITION_FAILED", bad
 
 
 def test_offline_13_nothing_low_no_model_call():
@@ -322,14 +323,14 @@ def test_offline_15_trace_renders():
 
 
 def test_offline_16_false_draft_claim_corrected():
-    """F-13: a viewer's model writes a fake 'awaiting approval' summary -> code corrects and flags it."""
+    """F-13: the model writes a fake 'awaiting approval' summary without drafting -> code corrects and flags it."""
     def fake_draft_claim(contents):
         name, _ = _last_tool_result(contents)
         if name is None:
             return _fc(("estimate_reorder_quantity", {"item": "Rulers 30cm"}))
         return _text("Proposed draft: Rulers 57 units.\n" + STATUS_LINE)
     with sandbox(), fake_model(fake_draft_claim):
-        run = tool_agent.run_agent("Draft a requisition for Rulers 30cm.", role="viewer")
+        run = tool_agent.run_agent("What would a requisition for Rulers 30cm look like?")
         assert run["output_warnings"] and "AWAITING HUMAN APPROVAL" not in run["final_text"].upper()
         assert "information only" in run["final_text"] and not run["drafts_created"]
 

@@ -19,8 +19,10 @@ stock that does not sell.
 | User | Need |
 |:---|:---|
 | **Shop owner / manager** | Reliable oversight; approves every purchase; protects cash flow |
-| **Junior staff (procurement officer role)** | Quick, defensible answers: what is low, how much to order, from whom |
-| **Viewer** (e.g. new staff) | Look up stock, history and policy without being able to create requisitions |
+| **A trusted person appointed by the owner** | Quick, defensible answers: what is low, how much to order, from whom |
+
+In the system these are **one trusted user per shop** with no separate roles (decision-001, 2026-10-13);
+the separation that matters is **between shops** (one shop's data must never reach another).
 
 ## 3. Proposal statement (brief §2 format)
 
@@ -58,7 +60,7 @@ quote parsing (User Story 3 — descoped, see user stories); sales/POS integrati
 
 - Purchase history is used as the demand estimate because the data has no sales records.
 - One shop, one currency (UGX), three suppliers; quotes are current.
-- Users are identified by name and role at login; real authentication comes later.
+- One trusted user per shop, identified by name at login; real authentication comes later and is the key access control.
 - The Gemini free tier remains available (fallback across six Flash models).
 
 ## 7. Constraints
@@ -83,6 +85,6 @@ quote parsing (User Story 3 — descoped, see user stories); sales/POS integrati
 |:---|:---|
 | Model gives wrong numbers | All maths in Python tools (F-04 closed) |
 | Model claims actions it did not take | Code output check (F-13) |
-| Model tries tools it lacks | Registry permission checks (F-07) |
+| Model tries tools that do not exist (e.g. approve) | Registry allow-list (F-07, O-16, L-05) |
 | Free-tier quota/outages | Six-model fallback chain, offline test suites |
 | Team members behind schedule | `docs/ONBOARDING.md` catch-up guide and owned tasks per role |

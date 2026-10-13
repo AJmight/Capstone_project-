@@ -14,7 +14,7 @@ WHAT HAPPENS WHEN YOU ASK A QUESTION
         +--> asks for tool(s), e.g. estimate_reorder_quantity(item="ITM001")
                  |
                  v
-    [2] tools/registry.py execute_tool(): allow-list -> permission -> argument check
+    [2] tools/registry.py execute_tool(): allow-list -> argument check -> trusted context
         -> runs the Python function -> returns a result dict (or an error dict)
                  |
                  v
@@ -40,21 +40,21 @@ OUTPUT CHECK (Week 5, failure F-13)
 After the model's final answer, code checks it does not CLAIM a draft that does not
 exist (the "Status: DRAFT - AWAITING HUMAN APPROVAL" line, or a REQ-... ID that was not
 created in this run). If it does, the claim is corrected and the run is flagged in
-"output_warnings". This was added after a viewer (who cannot draft) was shown a
-draft-like summary built from read-only tools.
+"output_warnings". It was added after a model showed a draft-like summary,
+built from read-only tools, although no draft had been created (failure F-13).
 
 TRACES
 ------
-Every run is appended to evidence/week4/agent_traces.jsonl (question, role,
+Every run is appended to evidence/week4/agent_traces.jsonl (question, user,
 each turn's model, every tool call with arguments and result, final answer,
 stop reason). Each tool call is also in evidence/week4/tool_traces.jsonl.
 
 Usage (PowerShell, from the repo root):
   py src\\tool_agent.py "Which items are low on stock?"
-  py src\\tool_agent.py "Draft a requisition for Bic Pens" --role staff --user "Arnold"
+  py src\\tool_agent.py "Draft a requisition for Bic Pens" --user "Arnold"
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.2.0 (Week 5: per-turn steps, repeated-call guard, observer hook, output check)
+Version: 1.3.0 (single trusted user: user roles removed)
 """
 
 # ---------------------------------------------------------------------------
@@ -73,12 +73,12 @@ from google.genai import types                # SDK request/response types
 
 from ai_engine import load_system_prompt      # reads only the BEGIN/END part of a prompt file
 from llm_client import AllModelsFailedError, MODELS, call_with_fallback, client
-from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations_for
+from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PROMPT_PATH = Path("prompts/procurement_assistant_v2.4.0.md")       # tool-mode prompt
+PROMPT_PATH = Path("prompts/procurement_assistant_v2.5.0.md")       # tool-mode prompt
 MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
 MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "12"))
 TRACE_PATH = Path("evidence/week4/agent_traces.jsonl")
@@ -150,7 +150,7 @@ def _write_trace(record: dict) -> None:
 # ---------------------------------------------------------------------------
 # The agent loop
 # ---------------------------------------------------------------------------
-def run_agent(user_message: str, role: str = "staff", user_name: str = "staff user",
+def run_agent(user_message: str, user_name: str = "shop user",
               system_prompt: str | None = None, max_turns: int = MAX_TURNS,
               max_tool_calls: int = MAX_TOOL_CALLS, on_tool_result=None,
               trace_label: str = "tool_agent", allowed_tools: set[str] | None = None) -> dict:
@@ -158,14 +158,12 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
     Answer one user message, letting the model call tools, within strict limits.
 
     user_message  the question/request typed by the user
-    role          viewer | staff | owner  (decides which tools the model may use)
     user_name     recorded as created_by on drafts (taken from the session, not the model)
     on_tool_result  optional function(name, args, result, status, turn, model, model_text)
                   called after every tool call; the Week 5 restock agent uses it to update
                   its explicit state and build its trace timeline
     allowed_tools optional TASK allow-list (Week 5). Only these tools are shown to the model,
-                  and any other tool request is blocked with NOT_IN_TASK_CONTRACT, even if the
-                  user's role would normally allow it
+                  and any other tool request is blocked with NOT_IN_TASK_CONTRACT
     trace_label   written into the run trace so different agents can be told apart
     Returns a dict: run_id, final_text, stopped_reason, turns_used, steps, tool_calls,
                     models_used, drafts_created, latency_s
@@ -174,8 +172,8 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
     started = time.monotonic()
     system_prompt = system_prompt or load_system_prompt(PROMPT_PATH)
 
-    # The tools this role may use, converted into the SDK's declaration objects.
-    declarations = [types.FunctionDeclaration(**d) for d in tool_declarations_for(role)
+    # The tools for this run (all, or the task allow-list), converted into the SDK's declaration objects.
+    declarations = [types.FunctionDeclaration(**d) for d in tool_declarations()
                     if allowed_tools is None or d["name"] in allowed_tools]
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
@@ -232,7 +230,7 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
             retry_allowed = (len(previous) == 1 and
                              str(previous[0].get("error", "")).startswith(RETRYABLE_ERRORS))
             if allowed_tools is not None and call.name not in allowed_tools:
-                # Outside this task's contract (checked before the registry's role check).
+                # Outside this task's contract (checked before the registry is even called).
                 result, status = {"error": f"NOT_IN_TASK_CONTRACT: {call.name} is not allowed "
                                            f"for this task"}, "blocked"
             elif len(tool_calls) >= max_tool_calls:
@@ -243,7 +241,7 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
                 result, status = {"error": "REPEATED_CALL: you already called this tool with these "
                                            "arguments; use the earlier result"}, "blocked"
             else:
-                result, status = execute_tool(call.name, args, role,
+                result, status = execute_tool(call.name, args,
                                               context={"created_by": user_name}, run_id=run_id)
                 call_history.setdefault(key, []).append(result)
             if on_tool_result:
@@ -281,7 +279,7 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
         "latency_s": round(time.monotonic() - started, 2),
     }
     _write_trace({"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                  "agent": trace_label, "user_message": user_message, "role": role, "user_name": user_name,
+                  "agent": trace_label, "user_message": user_message, "user_name": user_name,
                   "limits": {"max_turns": max_turns, "max_tool_calls": max_tool_calls}, **result})
     return result
 
@@ -292,11 +290,10 @@ def run_agent(user_message: str, role: str = "staff", user_name: str = "staff us
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Ask the procurement agent a question")
     ap.add_argument("question", nargs="?", default="Which items are low on stock?")
-    ap.add_argument("--role", default="staff", choices=["viewer", "staff", "owner"])
-    ap.add_argument("--user", default="staff user", help="name recorded on drafts")
+    ap.add_argument("--user", default="shop user", help="name recorded on drafts")
     args = ap.parse_args()
 
-    out = run_agent(args.question, role=args.role, user_name=args.user)
+    out = run_agent(args.question, user_name=args.user)
     print(f"Run {out['run_id']} | models {out['models_used']} | {out['turns_used']} turn(s) | "
           f"stopped: {out['stopped_reason']} | {out['latency_s']}s")
     for c in out["tool_calls"]:

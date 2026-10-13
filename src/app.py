@@ -13,9 +13,12 @@ menu option calls a function that already exists and is tested:
 
 WHO YOU ARE
 -----------
-At start you type your name and pick a role (viewer / staff / owner). This is a demo
-"login" only - there are no passwords yet (a known limitation for Week 7/8). The role
-decides which tools the AI may use, and only the owner can approve or reject drafts here.
+At start you type your name. There are no user roles: in a small shop the person using
+the system is the one who reviews and approves, and anyone with access is trusted
+(docs/requirements/decision-001-single-trusted-user.md). There are no passwords yet - a
+known limitation; protecting access to the app is what keeps the shop's data safe.
+The AI still cannot approve anything: approving a draft is a deliberate human step
+(option 4) with a typed confirmation and an audit-log entry.
 
 For the App/Integration Lead: a web UI (e.g. Streamlit or Flask) should call the same five
 functions; nothing in this file needs to be copied except the menu flow.
@@ -24,7 +27,7 @@ Usage (PowerShell, repo root, venv active):
   py src\\app.py
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 0.5.0 (MVP up to Week 5)
+Version: 0.6.0 (single trusted user: roles removed)
 """
 
 # ---------------------------------------------------------------------------
@@ -32,8 +35,6 @@ Version: 0.5.0 (MVP up to Week 5)
 # ---------------------------------------------------------------------------
 import approvals                               # human approval gate (no AI)
 from tools import procurement                  # deterministic tools (no AI)
-
-ROLES = ("viewer", "staff", "owner")
 
 
 def ask(prompt: str, default: str = "") -> str:
@@ -45,25 +46,25 @@ def ask(prompt: str, default: str = "") -> str:
 # ---------------------------------------------------------------------------
 # Menu actions
 # ---------------------------------------------------------------------------
-def action_ask(user: str, role: str) -> None:
+def action_ask(user: str) -> None:
     from tool_agent import run_agent           # needs GEMINI_API_KEY
     question = ask("Your question (e.g. 'Which items are low on stock?')")
     if not question:
         return
-    out = run_agent(question, role=role, user_name=user)
+    out = run_agent(question, user_name=user)
     for c in out["tool_calls"]:
         print(f"  [tool] {c['name']}({c['args']}) -> {c['status']}")
     print("\n" + out["final_text"])
     print(f"\n(models: {', '.join(out['models_used'])} | stop: {out['stopped_reason']} | run {out['run_id']})")
 
 
-def action_restock(user: str, role: str) -> None:
+def action_restock(user: str) -> None:
     from restock_agent import run_restock      # needs GEMINI_API_KEY
     budget = ask("Weekly budget in UGX", "300000").replace(",", "")
     if not budget.isdigit():
         print("Budget must be a whole number, e.g. 300000.")
         return
-    rec = run_restock(int(budget), user_name=user, role=role)
+    rec = run_restock(int(budget), user_name=user)
     for e in rec["state"]["timeline"]:
         print(f"  {e['phase']:<14} {e['detail'][:110]}")
     print(f"\nOUTCOME: {rec['outcome']}\n\n{rec['final_text']}")
@@ -73,7 +74,7 @@ def action_restock(user: str, role: str) -> None:
             print(f"  - {h}")
 
 
-def action_policy(user: str, role: str) -> None:
+def action_policy(user: str) -> None:
     from rag.policy_qa import answer_policy_question   # needs GEMINI_API_KEY
     question = ask("Policy question (e.g. 'Who approves a UGX 800,000 requisition?')")
     if not question:
@@ -85,7 +86,7 @@ def action_policy(user: str, role: str) -> None:
     print(f"(model: {r['model'] or 'none - nothing relevant found'} | citations ok: {r['check']['citations_ok']})")
 
 
-def action_review(user: str, role: str) -> None:
+def action_review(user: str) -> None:
     drafts = approvals.list_drafts()
     if not drafts:
         print("No drafts yet.")
@@ -97,9 +98,6 @@ def action_review(user: str, role: str) -> None:
         return
     draft_id = drafts[int(pick) - 1]["draft_id"]
     approvals._print_draft(approvals.load_draft(draft_id))
-    if role != "owner":
-        print("\nOnly the owner can edit, approve or reject drafts.")
-        return
     choice = ask("e = edit a quantity, a = approve, r = reject, Enter = back").lower()
     try:
         if choice == "e":
@@ -119,7 +117,7 @@ def action_review(user: str, role: str) -> None:
         print(f"Not allowed: {e}")
 
 
-def action_stock(user: str, role: str) -> None:
+def action_stock(user: str) -> None:
     category = ask("Category (Stationery / Office / Electronics, Enter for all)") or None
     r = procurement.get_inventory(category)
     if "error" in r:
@@ -139,13 +137,9 @@ MENU = [("Ask the assistant (AI + tools)", action_ask),
 
 def main() -> None:
     print("SME Procurement Assistant - MVP (AI supports, never decides)\n")
-    user = ask("Your name", "staff user")
-    role = ask("Role: viewer / staff / owner", "staff").lower()
-    if role not in ROLES:
-        print("Unknown role; using viewer (read-only).")
-        role = "viewer"
+    user = ask("Your name", "shop user")
     while True:
-        print(f"\nLogged in as {user} ({role})")
+        print(f"\nLogged in as {user}")
         for n, (label, _) in enumerate(MENU, 1):
             print(f"  {n}. {label}")
         print("  0. Exit")
@@ -154,7 +148,7 @@ def main() -> None:
             break
         if choice.isdigit() and 1 <= int(choice) <= len(MENU):
             try:
-                MENU[int(choice) - 1][1](user, role)
+                MENU[int(choice) - 1][1](user)
             except KeyboardInterrupt:
                 print("\n(cancelled)")
             except Exception as e:                # keep the app running; show the problem

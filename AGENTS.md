@@ -10,7 +10,7 @@ rules; a human approves every requisition. Status (2026-10-06): Weeks 1–5 comp
 
 ## Ground truth — check these before trusting any summary (including older AI handoffs)
 - Models: `gemini-3.8-flash` primary + fallback chain in `.env`. **`gemini-2.5-flash` returns 404 for this key — do not suggest it.** Free tier = 20 requests/day per model.
-- Current prompts: `prompts/procurement_assistant_v2.4.0.md` (agents), `prompts/policy_qa_v1.0.0.md` (RAG), `prompts/procurement_assistant_v1.2.0.md` (Week 2 context mode). Older versions in `prompts/archive/`.
+- Current prompts: `prompts/procurement_assistant_v2.5.0.md` (agents), `prompts/policy_qa_v1.0.0.md` (RAG), `prompts/procurement_assistant_v1.2.0.md` (Week 2 context mode). Older versions in `prompts/archive/`.
 - 8 tools: `src/tools/registry.py` `TOOL_REGISTRY`; schemas exported to `docs/requirements/tool-schemas.json`.
 - Expected figures (verified): 10 of 15 items low; Bic Pens reorder 65; Rulers 57; draft Bic Pens + Rulers = UGX 84,406; budget 300,000 plan = 4 items, UGX 294,130.
 
@@ -18,7 +18,7 @@ rules; a human approves every requisition. Status (2026-10-06): Weeks 1–5 comp
 1. **Never put arithmetic in prompts or let the model compute figures.** Add or change a tool in `src/tools/procurement.py`.
 2. **Never add a tool that approves, orders, pays, contacts suppliers or connects to banks/mobile money.** Approval lives only in `src/approvals.py` (human).
 3. Every model call goes through `src/llm_client.py` (fallback chain) — never create a separate Gemini client.
-4. Every tool call goes through `registry.execute_tool()` (allow-list, role permission, argument validation, trace).
+4. Every tool call goes through `registry.execute_tool()` (allow-list, argument validation, trusted context, trace). There are no user roles (single trusted user per shop, decision-001); the separation that matters is between shops.
 5. Prompts are versioned files: change → new version file, old one to `prompts/archive/`, row in the file's Version History and in `prompts/prompt_history.md`, re-run the live tests.
 6. **Comment heavily**: module header, a comment per section, and explanations of significant lines and data flow — teammates must be able to explain every line in the viva.
 7. Tests: run all offline suites before committing (`tests/test_week4_tools.py --offline`, `test_week5_agent.py --offline`, `test_mvp_tools.py --offline`, `test_week3_rag.py --offline`). Never re-run live tests until they pass; keep failing runs as evidence, fix with a new version, document in `docs/evaluation/`.

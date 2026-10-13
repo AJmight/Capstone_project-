@@ -46,8 +46,8 @@ Rule for every card: **only record work you did yourself.** Review cards count w
 | Card | Due | Checklist |
 |:---|:---:|:---|
 | **AP-1 Review the app layer** `review-of-existing-work` | 14 Oct | ☐ read `src/app.py`, `src/tool_agent.py`, `src/approvals.py` ☐ write UI requirements (pages, roles) ☐ choose framework (Streamlit is simplest) |
-| **AP-2 Web UI: core pages** | 18 Oct | ☐ login screen (name + password, role from storage — coordinate with AI-2) ☐ Chat page → `run_agent()` ☐ Weekly restock page → `run_restock()` with timeline ☐ Policy Q&A page → `answer_policy_question()` with sources ☐ Stock page → `get_inventory()` |
-| **AP-3 Pending-approval page (US 10, AC 10.1)** | 19 Oct | ☐ list drafts awaiting approval ☐ owner-only edit / approve / reject using `approvals.edit_quantity()` and `approvals.decide()` ☐ reason required for reject and over-cap lines |
+| **AP-2 Web UI: core pages** | 18 Oct | ☐ login screen (name + password, linked to the user's shop — coordinate with AI-2) ☐ Chat page → `run_agent()` ☐ Weekly restock page → `run_restock()` with timeline ☐ Policy Q&A page → `answer_policy_question()` with sources ☐ Stock page → `get_inventory()` |
+| **AP-3 Pending-approval page (US 10, AC 10.1)** | 19 Oct | ☐ list drafts awaiting approval ☐ edit / approve / reject (typed confirmation) using `approvals.edit_quantity()` and `approvals.decide()` ☐ reason required for reject and over-cap lines |
 | **AP-4 Evidence view for the demo** | 21 Oct | ☐ page showing the last run's trace (tools, models, stop reason) — brief §10 "engineering evidence view" |
 | **AP-5 Demo deployment / runbook** | 22 Oct | ☐ one command to start the UI ☐ fallback plan if the internet/quota fails (recorded run + offline tests) |
 
@@ -69,7 +69,7 @@ Rule for every card: **only record work you did yourself.** Review cards count w
 | **QA-1 Review existing tests** `review-of-existing-work` | 15 Oct | ☐ run all offline suites ☐ read every test docstring ☐ list gaps as GitHub issues |
 | **QA-2 Week 7 evaluation set (30+ scenarios)** | 18 Oct | ☐ categories from the brief: normal, edge, incorrect information, adversarial, tool failure, unauthorised action ☐ include cross-user / cross-tenant leakage cases (see the data-protection doc §4) ☐ expected behaviour per scenario |
 | **QA-3 Evaluation runner + metrics** | 19 Oct | ☐ runner in `tests/` (reuse the style of `tests/test_week4_tools.py`) ☐ metrics: task completion, groundedness, correct tool choice, instruction following, latency, safety violations ☐ rubric instead of brittle keyword checks |
-| **QA-4 Red-team session** | 19 Oct | ☐ prompt injection (in messages and in documents) ☐ role abuse (viewer trying to draft/approve) ☐ log every finding |
+| **QA-4 Red-team session** | 19 Oct | ☐ prompt injection (in messages and in documents) ☐ attempts to make the AI approve, order or pay; requests for another shop's data ☐ log every finding |
 | **QA-5 Failure catalogue (≥ 5 genuine failures)** | 20 Oct | ☐ add to `docs/evaluation/` with root cause, fix and re-test evidence (format of `week3-rag-evaluation.md`) |
 
 ## DevOps / Documentation Lead

@@ -2,18 +2,20 @@
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead) · Updated 2026-10-03 · Builds on `architecture-week4.md`.
 
+> **Updated 2026-10-13 — single trusted user:** user roles (viewer/staff/owner) were removed; see `docs/requirements/decision-001-single-trusted-user.md`.
+
 ## Agent loop as a state machine
 
 ```mermaid
 stateDiagram-v2
     [*] --> PRECONDITIONS
-    PRECONDITIONS --> STOP: bad budget or role<br/>PRECONDITION_FAILED
+    PRECONDITIONS --> STOP: bad budget<br/>PRECONDITION_FAILED
     PRECONDITIONS --> SENSE: ok
     SENSE --> STOP: nothing low<br/>NOTHING_TO_DO
     SENSE --> PLAN_DECIDE: low items in [SENSE] block
     PLAN_DECIDE --> ACT: model requests an allowed tool
     PLAN_DECIDE --> POSTCONDITIONS: model writes summary
-    ACT --> OBSERVE: registry runs tool (allow-list, role, args)
+    ACT --> OBSERVE: registry runs tool (allow-list, args)
     OBSERVE --> REPLAN: deferred items / nothing fits / SERVICE_UNAVAILABLE
     REPLAN --> PLAN_DECIDE
     OBSERVE --> PLAN_DECIDE: next step
@@ -26,7 +28,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    H[Staff / owner<br/>budget + role] --> RA
+    H[Shop user<br/>budget] --> RA
 
     subgraph RA["restock_agent.py (contract)"]
         PRE[Preconditions] --> SEN[SENSE<br/>get_low_stock]
@@ -42,7 +44,7 @@ flowchart LR
     end
 
     LOOP -- "observe()" --> ST
-    G --> REG[registry.execute_tool<br/>role + argument checks]
+    G --> REG[registry.execute_tool<br/>allow-list + argument checks]
     REG --> T1[plan_within_budget]
     REG --> T2[draft_requisition]
     T2 --> D[(data/drafts)]
