@@ -111,6 +111,13 @@ F-14 (prompt contradiction — fixed v2.2.1), F-15 (floats from Gemini — fixed
 Results: retrieval hit@3 10/10; RAG answers 15/15; MVP 7/7 + 6/6; regressions on v2.4.0 all pass.
 Failures: R-1…R-5 (R-4 open: numeric ranges in keyword search), F-16 fixed. Summary: `docs/evaluation/mvp-evaluation.md`.
 
+## 6e. Added 2026-10-13
+
+- `docs/notes/week3-week5-reference.md` — every Week 3/5 item with file:line references, RAG context-window example, the 15 questions.
+- `docs/requirements/data-protection-and-multi-user.md` — leakage analysis (provider, cross-session, cross-user, cross-tenant, logs) and the per-tenant RAG/storage plan for Weeks 6–7.
+- `docs/team/task-board.md` / `.csv` — 30 cards for the remaining weeks; README "Team roles and what to do next".
+- Week 5 offline test A-17 (tool-call limit) → 17/17.
+
 ## 7. Known issues
 
 - F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (document in final report).

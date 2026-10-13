@@ -1,6 +1,6 @@
 # Week 3 Retrieval Results - index v1.1.0
 
-Run at 2026-10-06T06:21:19 | 61 chunks | **hit@3 10/10**, context hit 10/10, MRR 0.88
+Run at 2026-10-13T18:23:33 | 61 chunks | **hit@3 10/10**, context hit 10/10, MRR 0.88
 
 | ID | Type | Question | Expected chunk | Rank | hit@3 | Context hit | Top 3 (score) |
 |---|---|---|---|:---:|:---:|:---:|---|

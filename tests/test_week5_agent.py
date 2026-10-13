@@ -15,6 +15,7 @@ manners) enforces the contract:
     model unavailable      -> HANDOFF_MODEL_UNAVAILABLE
     forgetful model        -> summary without the approval status line -> POSTCONDITION_FAILED
     false draft claim      -> viewer shown a fake "awaiting approval" summary -> corrected (F-13)
+    tool-hungry model      -> cut off after MAX_TOOL_CALLS executions -> HANDOFF_TOOL_CALL_LIMIT
     viewer role / bad budget / nothing low -> stop before any model call
 
 LIVE (real Gemini, about 3-4 requests per trace): the four Week 5 execution traces
@@ -331,6 +332,24 @@ def test_offline_16_false_draft_claim_corrected():
         run = tool_agent.run_agent("Draft a requisition for Rulers 30cm.", role="viewer")
         assert run["output_warnings"] and "AWAITING HUMAN APPROVAL" not in run["final_text"].upper()
         assert "information only" in run["final_text"] and not run["drafts_created"]
+
+
+def test_offline_17_tool_call_limit():
+    """A model asking for many different tool calls is cut off at MAX_TOOL_CALLS (LIMIT) -> HANDOFF."""
+    def greedy_tools_policy(contents):
+        ids, _ = _sense(contents)
+        turn = sum(1 for c in contents if c.role == "model") + 1
+        # 4 DIFFERENT calls per turn (distinct budgets), so the repeat guard does not stop them.
+        return _fc(*[("plan_within_budget", {"items": ids, "budget_ugx": 100000 + turn * 10 + i})
+                     for i in range(4)])
+    with sandbox(), fake_model(greedy_tools_policy):
+        rec = restock_agent.run_restock(300000)
+        calls = rec["loop"]["tool_calls"]
+        executed = [c for c in calls if c["status"] != "blocked"]
+        limited = [c for c in calls if str(c["result"].get("error", "")).startswith("LIMIT")]
+        assert len(executed) == restock_agent.MAX_TOOL_CALLS, len(executed)
+        assert limited and rec["outcome"] == "HANDOFF_TOOL_CALL_LIMIT", rec["outcome"]
+        assert not rec["state"]["drafts_created"]
 
 
 def run_offline():

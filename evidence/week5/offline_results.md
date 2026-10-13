@@ -1,6 +1,6 @@
 # Week 5 Offline Agent Tests
 
-Run at 2026-10-06T06:21:03 | **16/16 passed**
+Run at 2026-10-13T18:23:26 | **17/17 passed**
 
 | id | test | passed | detail |
 |---|---|---|---|
@@ -20,3 +20,4 @@ Run at 2026-10-06T06:21:03 | **16/16 passed**
 | A-14 | plan_within_budget: urgency order, skip-and-continue, needs_human, budget validation. | **PASS** |  |
 | A-15 | The Markdown trace has the phases a marker looks for. | **PASS** |  |
 | A-16 | F-13: a viewer's model writes a fake 'awaiting approval' summary -> code corrects and flags it. | **PASS** |  |
+| A-17 | A model asking for many different tool calls is cut off at MAX_TOOL_CALLS (LIMIT) -> HANDOFF. | **PASS** |  |

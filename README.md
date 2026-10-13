@@ -12,7 +12,8 @@ synthetic CSV data.
 
 > AI supports, never decides.
 
-**New to the project? Start with [`docs/ONBOARDING.md`](docs/ONBOARDING.md).** AI assistants: read [`AGENTS.md`](AGENTS.md).
+**New to the project? Start with [`docs/ONBOARDING.md`](docs/ONBOARDING.md), then find your role in
+[Team roles and what to do next](#team-roles-and-what-to-do-next).** AI assistants: read [`AGENTS.md`](AGENTS.md).
 Quick start after setup: `py src\app.py`
 
 ## Status
@@ -103,6 +104,68 @@ py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 
 All data is synthetic. Never commit `.env`; only `.env.example` (placeholders) is in git.
 
-## Team
+## Team roles and what to do next
 
-AI Engineering Lead: Mwesigwa Arnold Mugahi (23/U/244738/PS). Other roles: see `docs/weekly-reports/`.
+Where we are (13 Oct 2026): **Weeks 1–5 are done (MVP).** Remaining: Week 6 (memory, state,
+interoperability), Week 7 (30+ scenario evaluation, guardrails), Week 8 (release and final report,
+**hand-in 23 Oct**), presentations **27/29/30 Oct**. Every task below is a card on the team board —
+full checklists in [`docs/team/task-board.md`](docs/team/task-board.md) (importable:
+[`docs/team/task-board.csv`](docs/team/task-board.csv)).
+
+| Role | Person | What this role is responsible for |
+|:---|:---|:---|
+| Project / Requirements Lead | [name] | Board, weekly reports, requirements, final report assembly, presentation |
+| Application / Integration Lead | [name] | Web UI over the existing functions, approval page, demo deployment |
+| AI Engineering Lead | Mwesigwa Arnold Mugahi (23/U/244738/PS) | Model, prompts, RAG, tools, agents; Week 6 state/memory/interface; guardrails |
+| Quality / Security Lead | [name] | Tests, 30+ scenario evaluation, red-teaming, failure catalogue |
+| DevOps / Documentation Lead | [name] | Setup on clean machines, CI, dependencies, release, evidence appendix |
+
+### Everyone — first (by 14 Oct)
+- [ ] Set up the project and get **your own** Gemini key (README "Setup"); never commit `.env`
+- [ ] Run the four offline test suites (README "Run")
+- [ ] Run `py src\app.py` and try the five scenarios in `docs/ONBOARDING.md` §4
+- [ ] Read `docs/notes/agentic-ai-notes.md` (20 min) and `docs/ONBOARDING.md` §5
+- [ ] Find your cards on the board and put your name on them
+
+### Project / Requirements Lead
+- [ ] PR-1 Set up the board with all cards and names (14 Oct)
+- [ ] PR-2 Review charter, user stories, boundary matrix; decide on User Story 3 (15 Oct)
+- [ ] PR-3 Fill the contribution rows in the Week 1–5 reports with what each person really did (15 Oct)
+- [ ] PR-4 / PR-5 Week 6 and Week 7 reports (16 and 20 Oct)
+- [ ] PR-6 Final engineering report, 8–12 pages, brief §9 (skeleton 17 Oct, final 22 Oct)
+- [ ] PR-7 Presentation deck and demo script, brief §10 (25 Oct)
+
+### Application / Integration Lead
+- [ ] AP-1 Review `src/app.py`, `src/tool_agent.py`, `src/approvals.py`; choose a UI framework (14 Oct)
+- [ ] AP-2 Web UI: login, chat, weekly restock, policy Q&A, stock pages (18 Oct)
+- [ ] AP-3 Pending-approval page: owner-only edit / approve / reject (19 Oct)
+- [ ] AP-4 Evidence view showing a run's trace, for the demo (21 Oct)
+- [ ] AP-5 Demo runbook with an offline fallback (22 Oct)
+
+### AI Engineering Lead
+- [ ] AI-1 Study RAG notes; answer DeepSeek's check questions (14 Oct)
+- [ ] AI-2 SQLite persistent state with tenant/user scoping (16 Oct)
+- [ ] AI-3 One justified memory + Memory Design and Data Handling Note (16 Oct)
+- [ ] AI-4 MCP-style interface spec for the tools (16 Oct)
+- [ ] AI-5 Guardrails: isolation, log redaction, fixes from evaluation (20 Oct)
+- [ ] AI-6 Final regression, report sections 4–7, handoff update (22 Oct)
+
+### Quality / Security Lead
+- [ ] QA-1 Run and review all existing tests; log gaps as issues (15 Oct)
+- [ ] QA-2 30+ evaluation scenarios incl. leakage and unauthorised-action cases (18 Oct)
+- [ ] QA-3 Evaluation runner with metrics and a scoring rubric (19 Oct)
+- [ ] QA-4 Red-team session: prompt injection, role abuse (19 Oct)
+- [ ] QA-5 Failure catalogue: ≥ 5 genuine failures with re-tests (20 Oct)
+
+### DevOps / Documentation Lead
+- [ ] DO-1 Test the README setup on a clean machine; fix gaps (14 Oct)
+- [ ] DO-2 GitHub Actions running the offline suites on every push (16 Oct)
+- [ ] DO-3 Trim and pin `requirements.txt`, state the Python version (16 Oct)
+- [ ] DO-4 Release `v1.0` with notes and known limitations (22 Oct)
+- [ ] DO-5 Evidence appendix index and demo screenshots (22 Oct)
+
+**Contribution rule:** record only work you did yourself; reviewing existing work counts when you leave
+evidence (an issue, a commit, or notes in `docs/reviews/<your-name>.md`).
+
+**Key reading for everyone:** what was built and where — [`docs/notes/week3-week5-reference.md`](docs/notes/week3-week5-reference.md);
+data leakage and multi-user plan — [`docs/requirements/data-protection-and-multi-user.md`](docs/requirements/data-protection-and-multi-user.md).

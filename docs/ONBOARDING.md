@@ -92,6 +92,9 @@ Read in this order (every file has comments on each section):
 
 ## 6. Who owns what from now (proposal — agree it in our next meeting and put it in ClickUp)
 
+> **Updated 13 Oct:** the detailed cards with checklists and due dates are in `docs/team/task-board.md`
+> (importable CSV: `docs/team/task-board.csv`) and summarised in the README.
+
 | Role | Your tasks (Weeks 6–8) | Review task for work already done (counts as your contribution when recorded) |
 |:---|:---|:---|
 | **Project/Requirements Lead** | ClickUp board and weekly tasks; weekly reports (fill the `[name]` rows); final report structure (brief §9); presentation plan (brief §10) | Review `project-charter.md` and `user-stories.md`; propose changes; decide with the team whether to attempt story 3 (PDF quotes) |

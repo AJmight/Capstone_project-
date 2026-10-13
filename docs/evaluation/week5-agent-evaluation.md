@@ -8,7 +8,7 @@
 
 | Suite | Prompt | Result |
 |:---|:---:|:---:|
-| Offline agent tests (scripted fake model, no quota) | — | **16/16** |
+| Offline agent tests (scripted fake model, no quota) | — | **16/16** (17/17 from 2026-10-13 with A-17 tool-call limit) |
 | Week 4 offline regression | — | **22/22** |
 | Live traces T1–T4 | v2.1.0 | 4/4 |
 | Week 4 live regression | v2.1.0 | **5/6** — L-05 FAIL → **F-13** |
@@ -46,6 +46,7 @@ Natural infrastructure recovery also appears in the traces: several runs switche
 | A-14 | — | `plan_within_budget` rules (urgency order, skip-and-continue, validation) |
 | A-15 | — | trace contains every phase |
 | A-16 | viewer claims a fake draft | output check corrects it (F-13) |
+| A-17 | asks for many different tool calls | cut off at `MAX_TOOL_CALLS` (6) with `LIMIT` → HANDOFF_TOOL_CALL_LIMIT (added 2026-10-13: the limit existed in code but had no test) |
 
 ## Failure catalogue — Week 5 entries
 
