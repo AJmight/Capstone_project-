@@ -116,7 +116,7 @@ full checklists in [`docs/team/task-board.md`](docs/team/task-board.md) (importa
 |:---|:---|:---|
 | Project / Requirements Lead | [name] | Board, weekly reports, requirements, final report assembly, presentation |
 | Application / Integration Lead | [name] | Web UI over the existing functions, approval page, demo deployment |
-| AI Engineering Lead | Mwesigwa Arnold Mugahi (23/U/244738/PS) | Model, prompts, RAG, tools, agents; Week 6 state/memory/interface; guardrails |
+| AI Engineering Lead | Mwesigwa Arnold Mugahi (23/U/24738/PS) | Model, prompts, RAG, tools, agents; Week 6 state/memory/interface; guardrails |
 | Quality / Security Lead | [name] | Tests, 30+ scenario evaluation, red-teaming, failure catalogue |
 | DevOps / Documentation Lead | [name] | Setup on clean machines, CI, dependencies, release, evidence appendix |
 

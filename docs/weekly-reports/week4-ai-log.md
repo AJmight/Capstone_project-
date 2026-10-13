@@ -1,6 +1,6 @@
 # AI Engineering Log — Week 4
 
-**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS)
+**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/24738/PS)
 
 ## AI tools used on this project (declared per brief §6)
 

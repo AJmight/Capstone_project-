@@ -5,7 +5,7 @@ generated work was reviewed and tested before it was accepted.
 
 ## AI tools used
 
-**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS)
+**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/24738/PS)
 
 | Tool | Used for |
 |:---|:---|

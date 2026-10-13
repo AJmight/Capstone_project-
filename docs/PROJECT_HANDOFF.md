@@ -9,7 +9,7 @@ This replaces an earlier handoff draft that contained outdated facts (listed in 
 - **Brief:** `C:\Users\user\OneDrive\Desktop\year4 sem1\emerging trends\BSE4104 AI Agentic Capstone Assignment.docx`
 - **Dates:** 31 Aug – 23 Oct 2026; presentations 27/29/30 Oct 2026
 - **Repo:** https://github.com/AJmight/Capstone_project- (`main`); local `C:\Users\user\Capstone_project-`
-- **AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS), GitHub AJmight. Other roles: TBD.
+- **AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/24738/PS), GitHub AJmight. Other roles: TBD.
 - **AI tools used:** Gemini (product model + proof-reading), Claude Code (coding partner), DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline fixes).
 - **Code style rule:** comment every module, section and significant line (groupmates review the code).
 - Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → 4 → 5 → 3 (all done) → 6–8. Week 1 docs consolidated into `docs/requirements/` on 2026-10-06.

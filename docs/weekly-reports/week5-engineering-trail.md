@@ -1,6 +1,6 @@
 # Week 5 Engineering Trail — what was done, in order, and why
 
-**Author:** Mwesigwa Arnold Mugahi (23/U/244738/PS), AI Engineering Lead, with Claude Code as coding partner
+**Author:** Mwesigwa Arnold Mugahi (23/U/24738/PS), AI Engineering Lead, with Claude Code as coding partner
 **Dates:** 2026-10-02/03 · **Starting point:** commit `6624dda` (tag `week4-complete`)
 **Purpose:** a complete record so groupmates, DeepSeek or ChatGPT can see exactly what exists, why, and how to check it.
 

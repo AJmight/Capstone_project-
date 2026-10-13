@@ -43,7 +43,7 @@ See the failure catalogue (R-1 … R-5). R-4 (numeric ranges with keyword search
 
 | Member | Role | Tasks owned | Evidence |
 |:---|:---|:---|:---|
-| Mwesigwa Arnold Mugahi (23/U/244738/PS) | AI Engineering Lead | Corpus, RAG pipeline, tests, documentation | Commits on `main` |
+| Mwesigwa Arnold Mugahi (23/U/24738/PS) | AI Engineering Lead | Corpus, RAG pipeline, tests, documentation | Commits on `main` |
 | [to be added] | | | |
 
 ## 5. Plan for next week

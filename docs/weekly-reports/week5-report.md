@@ -49,7 +49,7 @@ fixing F-13.
 
 | Member | Role | Tasks owned | Evidence |
 |:---|:---|:---|:---|
-| Mwesigwa Arnold Mugahi (23/U/244738/PS) | AI Engineering Lead | Restock agent, planner tool, guards, prompt v2.1–v2.2.1, tests, traces, documentation | Commits on `main`, tag `week5-complete` |
+| Mwesigwa Arnold Mugahi (23/U/24738/PS) | AI Engineering Lead | Restock agent, planner tool, guards, prompt v2.1–v2.2.1, tests, traces, documentation | Commits on `main`, tag `week5-complete` |
 | [to be added] | | | |
 
 ## 5. Plan for next week

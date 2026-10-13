@@ -1,6 +1,6 @@
 # Week 3 Engineering Trail — what was done, in order, and why
 
-**Author:** Mwesigwa Arnold Mugahi (23/U/244738/PS), AI Engineering Lead, with Claude Code as coding partner
+**Author:** Mwesigwa Arnold Mugahi (23/U/24738/PS), AI Engineering Lead, with Claude Code as coding partner
 **Date:** 2026-10-06 · **Starting point:** commit `4458893` (tag `week5-complete`)
 **Note:** Week 3 was built after Weeks 4–5 (team decision). It was built in one session together with
 the MVP additions; the Lead asked to pause further RAG work to study the concept, so this week is

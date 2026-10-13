@@ -1,6 +1,6 @@
 # AI Engineering Log — Week 3 (and MVP additions, 2026-10-06)
 
-**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/244738/PS)
+**AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/24738/PS)
 
 **AI tools used:** Google Gemini (product model; proof-reading failing code), Claude Code (coding partner),
 DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline error fixes).

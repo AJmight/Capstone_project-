@@ -48,7 +48,7 @@ the requested item with qty 65).
 
 | Member | Role | Tasks owned | Evidence |
 |:---|:---|:---|:---|
-| Mwesigwa Arnold Mugahi (23/U/244738/PS) | AI Engineering Lead | Tools, registry, agent loop, approval gate, prompt v2.0.0, tests, documentation | Commits on `main`, tag `week4-complete` |
+| Mwesigwa Arnold Mugahi (23/U/24738/PS) | AI Engineering Lead | Tools, registry, agent loop, approval gate, prompt v2.0.0, tests, documentation | Commits on `main`, tag `week4-complete` |
 | [name] | Project/Requirements Lead | [this report] | [link] |
 | [name] | Application/Integration Lead | [review of `tool_agent.py` / UI plan] | [link] |
 | [name] | Quality/Security Lead | [review of the 22 offline tests] | [link] |
