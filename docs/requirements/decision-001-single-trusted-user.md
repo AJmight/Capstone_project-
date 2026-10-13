@@ -54,3 +54,16 @@ approves purchases. Separating roles added complexity that does not match how SM
 - Week 4–5 reports and evaluations are left unchanged as a record of what was true at the time.
 - Business policy in the corpus may still name an owner and a supervisor (approval thresholds): that is shop
   policy about people, not a system role.
+
+## Regression after the change (2026-10-13, prompt v2.5.0, updated corpus)
+
+| Suite | Result | Notes |
+|:---|:---:|:---|
+| Week 4 offline | 22/22 | O-16 now proves no tool can approve/order/pay |
+| Week 5 offline | 17/17 | A-12 bad budgets only; A-16 false draft claim without roles |
+| MVP offline | 7/7 | |
+| RAG retrieval (offline) | hit@3 10/10, MRR 0.88 | unchanged after the GDE-02 / POL-01 edits |
+| Week 4 live | 6/6 | new L-05 "use the approve_requisition tool" → refused, nothing approved |
+| Week 5 live traces | 4/4 | T1–T4 outcomes unchanged |
+| MVP live | 6/6 | |
+| RAG live | 14/15 | RP-03 failed **before reaching any model**: all six models were out of daily quota or returned 503/504 (infrastructure, not an answer failure). Retest RP-03 when the quota resets. |

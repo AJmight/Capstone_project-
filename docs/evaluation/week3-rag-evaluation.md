@@ -59,3 +59,9 @@ documented in the test file.
 - 15 questions on a 12-document corpus is a small evaluation; Week 7 should add synonym and numeric cases.
 - Keyword checks for answers are brittle (third test-design error this project); a rubric or LLM-judge
   with human spot checks is planned for Week 7.
+
+## Regression — 2026-10-13 (single trusted user, corpus GDE-02/POL-01 edited)
+
+Retrieval unchanged (hit@3 10/10, MRR 0.88). Live answers **14/15**: RP-03 got no answer because every model
+was out of daily quota or busy (429/503/504) — an infrastructure failure recorded in
+`evidence/traces/llm_calls.jsonl`; the other 14 passed on the lite models. To be re-tested when quota resets.
