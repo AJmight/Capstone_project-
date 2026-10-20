@@ -6,3 +6,9 @@ debug.log
 
 # Draft requisitions created at runtime by the agent (review with src/approvals.py)
 data/drafts/
+
+# Runtime SQLite store (Week 6/7): sessions, state transitions and justified memory.
+# It is created on first run and is rebuilt by any clean clone, so it is not source.
+data/procurement.db
+data/procurement.db-shm
+data/procurement.db-wal

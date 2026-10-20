@@ -51,6 +51,8 @@ import json                                   # drafts and the audit log are JSO
 from datetime import datetime, timezone       # decision timestamps
 from pathlib import Path                      # file paths
 
+from guardrails import (BudgetCeilingGuardrail, GuardrailViolation,   # Week 7 guardrails
+                        HumanInTheLoopGuardrail)
 from tools import procurement                 # reuse DRAFTS_DIR and DRAFT_STATUS so they never drift apart
 
 AUDIT_LOG_NAME = "audit_log.jsonl"
@@ -92,13 +94,26 @@ def list_drafts() -> list[dict]:
 # ---------------------------------------------------------------------------
 # The decision itself
 # ---------------------------------------------------------------------------
-def decide(draft_id: str, decision: str, decided_by: str, reason: str = "") -> dict:
+def decide(draft_id: str, decision: str, decided_by: str, reason: str = "",
+           actor_role: str = "HUMAN_OWNER") -> dict:
     """
     Record a human decision on a draft. decision is "APPROVED" or "REJECTED".
 
     Returns the updated draft. Raises ApprovalError if a rule is broken.
     This function is called by the command line below (and by tests), never by the AI.
+
+    Week 8 hardening (Failure Modes F-19, F-24 and the F-12 closure):
+      - actor_role is checked against the human-only guardrail, so the function
+        itself refuses to record a decision for an AI actor;
+      - the allocated budget of the originating session is a HARD ceiling: a
+        draft that is over budget cannot be approved (F-12);
+      - the decision also advances the Week 6 state machine, so the session
+        moves AWAITING_APPROVAL -> APPROVED / REJECTED and the audit trail
+        records the human's signature (F-24).
     """
+    # --- the human-only boundary, checked before anything is written ---
+    HumanInTheLoopGuardrail.verify_action_permitted("approve_requisition", actor_role)
+
     if decision not in ("APPROVED", "REJECTED"):
         raise ApprovalError("decision must be APPROVED or REJECTED")
     if not decided_by.strip():
@@ -113,6 +128,39 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "") -> d
         raise ApprovalError("this draft has a line above the 200% safety cap; "
                             "an override reason is required to approve it (US 12)")
 
+    # --- F-12: the allocated budget is a hard ceiling, not a range ---
+    # The session is the link between the draft file and the Week 6 state
+    # machine (it stores the draft_id and the budget the owner allocated).
+    state_mgr, session = None, None
+    try:
+        from state import StateManager            # Week 6 state machine (imported lazily)
+        state_mgr = StateManager()
+        session = state_mgr.find_session_by_draft_id(draft_id)
+    except Exception:
+        state_mgr, session = None, None
+    if session is not None and decision == "APPROVED":
+        try:
+            BudgetCeilingGuardrail.verify_draft_within_budget(
+                draft_total_ugx=int(draft.get("estimated_budget_ugx", 0)),
+                allocated_budget_ugx=int(session.budget_ugx),
+            )
+        except GuardrailViolation as exc:
+            raise ApprovalError(
+                f"{exc} Edit the quantity first (py src\\approvals.py edit {draft_id} "
+                f"--item ITMxxx --qty N --by \"Name\" --reason \"...\")."
+            ) from exc
+        # F-12, second half: the draft also carries an ADVISORY estimate band
+        # (User Story 8, about +/-10%). That band may reach above the money the
+        # owner allocated even when the exact total fits. The approver must see
+        # it and say so, so a band above the budget needs an explicit reason.
+        band_high = int((draft.get("budget_range_ugx") or {}).get("high", 0))
+        if band_high > int(session.budget_ugx) and not reason.strip():
+            raise ApprovalError(
+                f"the estimate band reaches UGX {band_high:,}, above the allocated budget "
+                f"UGX {int(session.budget_ugx):,}. Approve with a --reason that says the extra "
+                f"headroom is accepted, or edit a quantity first."
+            )
+
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     draft["status"] = decision
     draft["decision"] = {"decision": decision, "decided_by": decided_by, "decided_at": now,
@@ -123,7 +171,50 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "") -> d
     with (_drafts_dir() / AUDIT_LOG_NAME).open("a", encoding="utf-8") as f:  # audit trail
         f.write(json.dumps({"timestamp": now, "draft_id": draft_id, "decision": decision,
                             "decided_by": decided_by, "reason": reason,
-                            "estimated_budget_ugx": draft["estimated_budget_ugx"]}) + "\n")
+                            "estimated_budget_ugx": draft["estimated_budget_ugx"],
+                            "estimate_band_high_ugx": (draft.get("budget_range_ugx") or {}).get("high"),
+                            "allocated_budget_ugx": (session.budget_ugx if session else None),
+                            "session_id": (session.session_id if session else None)}) + "\n")
+
+    # Record feedback into persistent SQLite memory (Week 6 justified memory use case)
+    try:
+        from memory import MemoryManager, MemoryType
+        mem_mgr = MemoryManager()
+        mem_mgr.store_memory(
+            shop_id=draft.get("shop_id", "default_shop"),
+            memory_type=MemoryType.APPROVAL_FEEDBACK,
+            target_key=draft_id,
+            summary=f"Owner {decision} {draft_id}: {reason or 'Approved as suggested'}",
+            details=(f"Requisition total: UGX {draft.get('estimated_budget_ugx', 0):,}. "
+                     f"Decided by {decided_by}. Reason: {reason or 'No override required'}."),
+            source_session_id=draft.get("session_id"),
+            created_by=decided_by
+        )
+    except Exception:
+        pass
+
+    # --- F-24: the human decision also advances the Week 6 workflow state ---
+    if state_mgr is not None and session is not None:
+        try:
+            from state import WorkflowStage
+            target = (WorkflowStage.APPROVED if decision == "APPROVED"
+                      else WorkflowStage.REJECTED)
+            state_mgr.update_session(session.session_id, approval_status=decision)
+            state_mgr.transition_to(
+                session.session_id, target,
+                reason=f"Human decision by {decided_by}",
+                metadata={"draft_id": draft_id, "decided_by": decided_by, "reason": reason},
+            )
+        except Exception:
+            # The decision is already recorded on the draft and in the audit log;
+            # a state-machine problem must not lose the human's decision.
+            pass
+        finally:
+            try:
+                state_mgr.close()
+            except Exception:
+                pass
+
     return draft
 
 

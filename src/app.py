@@ -34,6 +34,7 @@ Version: 0.6.0 (single trusted user: roles removed)
 # Imports (heavy modules that need the API key are imported only when used)
 # ---------------------------------------------------------------------------
 import approvals                               # human approval gate (no AI)
+from guardrails import GuardrailViolation, InputGuardrail   # Week 7 guardrails, used live
 from tools import procurement                  # deterministic tools (no AI)
 
 
@@ -51,6 +52,14 @@ def action_ask(user: str) -> None:
     question = ask("Your question (e.g. 'Which items are low on stock?')")
     if not question:
         return
+    # Week 8 hardening: the deterministic input guardrail screens the user's
+    # own words before they ever reach the model (F-18 / F-21). The model is
+    # not the security boundary; this code is.
+    try:
+        question = InputGuardrail.validate_user_prompt(question)
+    except GuardrailViolation as exc:
+        print(f"Request refused by the input guardrail: {exc}")
+        return
     out = run_agent(question, user_name=user)
     for c in out["tool_calls"]:
         print(f"  [tool] {c['name']}({c['args']}) -> {c['status']}")
@@ -64,7 +73,14 @@ def action_restock(user: str) -> None:
     if not budget.isdigit():
         print("Budget must be a whole number, e.g. 300000.")
         return
-    rec = run_restock(int(budget), user_name=user)
+    # Week 8 hardening: the budget is validated deterministically (F-21) and
+    # the allocated figure is a hard ceiling, not a range (F-12).
+    try:
+        budget_ugx = InputGuardrail.validate_budget(int(budget))
+    except GuardrailViolation as exc:
+        print(f"Budget refused by the guardrail: {exc}")
+        return
+    rec = run_restock(budget_ugx, user_name=user)
     for e in rec["state"]["timeline"]:
         print(f"  {e['phase']:<14} {e['detail'][:110]}")
     print(f"\nOUTCOME: {rec['outcome']}\n\n{rec['final_text']}")
@@ -78,6 +94,11 @@ def action_policy(user: str) -> None:
     from rag.policy_qa import answer_policy_question   # needs GEMINI_API_KEY
     question = ask("Policy question (e.g. 'Who approves a UGX 800,000 requisition?')")
     if not question:
+        return
+    try:
+        question = InputGuardrail.validate_user_prompt(question)
+    except GuardrailViolation as exc:
+        print(f"Request refused by the input guardrail: {exc}")
         return
     r = answer_policy_question(question)
     print("\n" + r["answer"])

@@ -27,7 +27,8 @@ THE LOOP (Sense -> Plan/Decide -> Act -> Observe -> Stop/Re-plan)
                             and the summary must say it awaits approval
   6. STOP           (code)  the OUTCOME is decided by code from the state, never by the
                             model's wording: DRAFT_READY, NOTHING_FITS_BUDGET, NOTHING_TO_DO,
-                            PRECONDITION_FAILED, POSTCONDITION_FAILED, HANDOFF_<reason>
+                            PRECONDITION_FAILED, POSTCONDITION_FAILED, BUDGET_CEILING_EXCEEDED,
+                            HANDOFF_<reason>
 
 WHO DECIDES WHAT
 ----------------
@@ -49,7 +50,7 @@ Usage (PowerShell, repo root):
   py src\\restock_agent.py --budget 300000 --save-trace T2_budget_replan
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.1.0 (single trusted user: role precondition removed)
+Version: 1.2.0 (Week 8 hardening: hard budget ceiling via BudgetCeilingGuardrail, F-12)
 """
 
 # ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ from dataclasses import asdict, dataclass, field   # the explicit AgentState
 from datetime import datetime, timezone       # timestamps
 from pathlib import Path                      # file paths
 
+from guardrails import (BudgetCeilingGuardrail, GuardrailViolation)   # Week 7 guardrails
 from tools import procurement                 # DRAFT_STATUS, DRAFTS_DIR
 from tools.registry import execute_tool
 from tool_agent import run_agent              # the bounded model <-> tool loop (Week 4, extended)
@@ -205,10 +207,22 @@ def _handoffs(state: AgentState) -> list[str]:
 # The agent run
 # ---------------------------------------------------------------------------
 def run_restock(budget_ugx: int, user_name: str = "shop user",
-                save_trace_as: str | None = None) -> dict:
+                save_trace_as: str | None = None, shop_id: str = "default_shop") -> dict:
     """Run the weekly restock task once. Returns the full run record (also logged)."""
     state = AgentState(goal=GOAL, budget_ugx=budget_ugx, user_name=user_name)
     run, final_text = None, ""
+    recalled_memories = []
+
+    # Initialize Week 6 State and Memory Managers (graceful fallback if unavailable)
+    state_mgr, mem_mgr, session = None, None, None
+    try:
+        from state import StateManager, WorkflowStage
+        from memory import MemoryManager
+        state_mgr = StateManager()
+        mem_mgr = MemoryManager()
+        session = state_mgr.create_session(shop_id=shop_id, user_name=user_name, budget_ugx=budget_ugx)
+    except Exception:
+        pass
 
     # ---- 0. PRECONDITIONS (code) ----
     problems = []
@@ -219,24 +233,72 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
     if problems:
         state.outcome = "PRECONDITION_FAILED"
         final_text = "Cannot start the restock task: " + "; ".join(problems) + "."
+        if state_mgr and session:
+            try:
+                state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED, "Preconditions failed")
+            except Exception:
+                pass
     else:
         # ---- 1. SENSE (code, through the registry so it is traced and validated) ----
+        if state_mgr and session:
+            try:
+                state_mgr.transition_to(session.session_id, WorkflowStage.SENSING_INVENTORY, "Querying low stock")
+            except Exception:
+                pass
+
         sense, status = execute_tool("get_low_stock", {}, run_id="sense")
         if "error" in sense:
             state.log("SENSE", f"failed: {sense['error']}")
             state.outcome = "HANDOFF_SENSE_FAILED"
             final_text = f"Could not read the inventory ({sense['error']}). No action taken."
+            if state_mgr and session:
+                try:
+                    state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED, "Sense failed")
+                except Exception:
+                    pass
         else:
             state.low_items = sense["items"]
             state.log("SENSE", f"{sense['count']} low items: {[i['item_id'] for i in sense['items']]}")
+            if state_mgr and session:
+                try:
+                    state_mgr.update_session(session.session_id, low_stock_count=len(state.low_items))
+                except Exception:
+                    pass
+
             if not state.low_items:
                 state.outcome = "NOTHING_TO_DO"
                 final_text = "No items are at or below their reorder point. Nothing to restock."
+                if state_mgr and session:
+                    try:
+                        state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED, "No items low")
+                    except Exception:
+                        pass
 
     if not state.outcome:
+        # Retrieve relevant persistent memories for the low stock items (Week 6)
+        mem_prompt = ""
+        if mem_mgr:
+            try:
+                target_keys = [i["item_id"] for i in state.low_items]
+                recalled_memories = mem_mgr.retrieve_relevant_memories(shop_id=shop_id, target_keys=target_keys)
+                mem_prompt = mem_mgr.format_memories_for_prompt(recalled_memories)
+                if recalled_memories:
+                    state.log("MEMORY", f"Retrieved {len(recalled_memories)} preferences for items: {target_keys}")
+            except Exception:
+                pass
+
+        if state_mgr and session:
+            try:
+                state_mgr.transition_to(session.session_id, WorkflowStage.PLANNING_RESTOCK, "Optimizing plan within budget")
+            except Exception:
+                pass
+
         # ---- 2-4. PLAN/DECIDE -> ACT -> OBSERVE loop (model + registry) ----
         message = (f"[RESTOCK TASK]\nGoal: {GOAL}\nBudget: UGX {budget_ugx:,} (budget_ugx={budget_ugx})\n"
                    f"Requested by: {user_name}\n\n[SENSE]\n" + json.dumps(state.low_items, indent=1))
+        if mem_prompt:
+            message += f"\n\n{mem_prompt}"
+
         run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
                         max_tool_calls=MAX_TOOL_CALLS, on_tool_result=state.observe,
                         trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS)
@@ -250,17 +312,64 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         for c in state.postconditions:
             state.log("POSTCONDITION", f"{'PASS' if c['passed'] else 'FAIL'} - {c['check']}: {c['detail']}")
 
+        # ---- 5b. WEEK 8 HARDENING: the budget ceiling is a HARD limit (F-12) ----
+        # The exact total must never exceed the money the owner allocated. The
+        # post-conditions above already test that; this guardrail is the named,
+        # independent gate that makes the rule explicit and auditable, and it is
+        # what the Week 7 catalogue points at. It is applied when the
+        # post-conditions pass, so a misbehaving model is reported as
+        # POSTCONDITION_FAILED (the more specific diagnosis) and a drifted rule
+        # is reported as BUDGET_CEILING_EXCEEDED.
+        budget_blocked = False
+        if state.drafts_created and all(c["passed"] for c in state.postconditions):
+            draft_total = int((state.draft or {}).get("estimated_budget_ugx", 0))
+            try:
+                BudgetCeilingGuardrail.verify_draft_within_budget(
+                    draft_total_ugx=draft_total, allocated_budget_ugx=int(budget_ugx))
+            except GuardrailViolation as exc:
+                budget_blocked = True
+                state.log("GUARDRAIL", str(exc))
+                final_text = (f"The requisition was stopped by the budget guardrail: {exc} "
+                              f"Nothing was sent to any supplier; a human must decide.")
+
         # ---- 6. OUTCOME decided by code ----
-        if run["stopped_reason"] != "model_finished":
+        if budget_blocked:
+            state.outcome = "BUDGET_CEILING_EXCEEDED"
+            if state_mgr and session:
+                try:
+                    state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED,
+                                            "Budget ceiling exceeded (F-12 guardrail)")
+                except Exception:
+                    pass
+        elif run["stopped_reason"] != "model_finished":
             state.outcome = f"HANDOFF_{run['stopped_reason'].upper()}"
         elif not all(c["passed"] for c in state.postconditions):
             state.outcome = "POSTCONDITION_FAILED"
         elif state.drafts_created:
             state.outcome = "DRAFT_READY"
+            if state_mgr and session:
+                try:
+                    state_mgr.transition_to(session.session_id, WorkflowStage.DRAFTING_ORDER, "Draft created")
+                    draft_tot = (state.draft or {}).get("estimated_budget_ugx", 0)
+                    state_mgr.update_session(session.session_id, draft_id=state.drafts_created[0],
+                                             draft_total_ugx=draft_tot, approval_status="AWAITING_APPROVAL")
+                    state_mgr.transition_to(session.session_id, WorkflowStage.AWAITING_APPROVAL, "Waiting for human owner signature")
+                except Exception:
+                    pass
         elif state.plan is not None and not state.plan["included"]:
             state.outcome = "NOTHING_FITS_BUDGET"
+            if state_mgr and session:
+                try:
+                    state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED, "Budget insufficient")
+                except Exception:
+                    pass
         else:
             state.outcome = "HANDOFF_NO_DRAFT"
+            if state_mgr and session:
+                try:
+                    state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED, "Handoff to human")
+                except Exception:
+                    pass
 
         # Tell the approver if the agent's own checks failed on a draft it created.
         if state.drafts_created:
