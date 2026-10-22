@@ -1,4 +1,7 @@
-* 52e7473 (HEAD -> main) Week 8 hardening: MCP contract, approval-to-FSM link, tenant binding, release checks
+* d6f74e0 (HEAD -> main, tag: week7-complete, tag: week6-complete, tag: v1.0.0) Docs: align README, onboarding, handoff, AGENTS and the team board with v1.0.0
+* bb3bd7b Week 8 release: final report, weekly report, AI log, engineering trail and evidence pack
+* fcd4a0d Tests: make SCEN_10 and SCEN_26 assert what the evaluation dataset documents
+* 52e7473 Week 8 hardening: MCP contract, approval-to-FSM link, tenant binding, release checks
 * 2e5430e Week 7: deterministic guardrails, 31-scenario evaluation and failure catalogue
 * d096ee6 Week 6: explicit state machine, justified memory and MCP interface
 * 8f2761d (origin/main, origin/HEAD) Single trusted user: regression results (completes 2655b66)

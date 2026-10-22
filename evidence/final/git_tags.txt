@@ -3,3 +3,6 @@ week4-complete
 week5-complete
 mvp-week5
 week3-complete
+week6-complete
+week7-complete
+v1.0.0
