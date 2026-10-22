@@ -1,10 +1,12 @@
-* d6f74e0 (HEAD -> main, tag: week7-complete, tag: week6-complete, tag: v1.0.0) Docs: align README, onboarding, handoff, AGENTS and the team board with v1.0.0
+* 23d44c3 (HEAD -> main, origin/main, origin/HEAD) Week 1: add the missing AI log and engineering trail
+* 5047ba8 (tag: v1.0.0) Release: tag v1.0.0 and refresh the release evidence at the tag
+* d6f74e0 (tag: week7-complete, tag: week6-complete) Docs: align README, onboarding, handoff, AGENTS and the team board with v1.0.0
 * bb3bd7b Week 8 release: final report, weekly report, AI log, engineering trail and evidence pack
 * fcd4a0d Tests: make SCEN_10 and SCEN_26 assert what the evaluation dataset documents
 * 52e7473 Week 8 hardening: MCP contract, approval-to-FSM link, tenant binding, release checks
 * 2e5430e Week 7: deterministic guardrails, 31-scenario evaluation and failure catalogue
 * d096ee6 Week 6: explicit state machine, justified memory and MCP interface
-* 8f2761d (origin/main, origin/HEAD) Single trusted user: regression results (completes 2655b66)
+* 8f2761d Single trusted user: regression results (completes 2655b66)
 * 2655b66 Week 5: agent task contract, three execution traces, bounded autonomy evidence
 * e8817c1 Correct registration number to 23/U/24738/PS in all documents
 * 7bd3f9b Docs: Week 3/5 reference, data-protection plan, team board; tool-limit test

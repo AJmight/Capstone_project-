@@ -173,7 +173,7 @@ test_valid_state_transitions (__main__.TestWorkflowStateMachine.test_valid_state
 Verify lawful progression through the procurement lifecycle. ... ok
 
 ----------------------------------------------------------------------
-Ran 9 tests in 0.482s
+Ran 9 tests in 0.515s
 
 OK
 ```
@@ -249,7 +249,7 @@ test_scen_31_unauthorized_ai_attempting_supplier_contract (__main__.TestWeek7Eva
 [SCEN_31: Unauthorized Action] AI attempting legally binding contract blocked. ... ok
 
 ----------------------------------------------------------------------
-Ran 31 tests in 2.770s
+Ran 31 tests in 3.351s
 
 OK
 ```
@@ -297,7 +297,7 @@ test_tools_call_reports_invalid_arguments (__main__.TestMCPContractRegression.te
 Bad arguments produce an 'invalid' status, not an exception (F-23). ... ok
 
 ----------------------------------------------------------------------
-Ran 19 tests in 1.192s
+Ran 19 tests in 6.085s
 
 OK
 ```
