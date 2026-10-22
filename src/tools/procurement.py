@@ -54,13 +54,14 @@ Version: 1.2.0 (MVP: get_inventory, query_purchase_history)
 # Imports
 # ---------------------------------------------------------------------------
 import csv                                    # read the CSV files row by row
-import json                                   # save draft requisitions as JSON files
 import math                                   # math.ceil() for "round UP"
 import uuid                                   # random suffix so draft IDs are unique
 from datetime import datetime, timezone       # timestamps for draft IDs and records
 from fractions import Fraction                # exact arithmetic (no 0.1 + 0.2 float surprises)
 from functools import wraps                   # keeps function names when we wrap them
 from pathlib import Path                      # file paths that work on Windows and Linux
+
+from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -71,6 +72,7 @@ DATA_DIR = Path("data")
 
 # Where draft requisitions are written. This is git-ignored: drafts are runtime records.
 DRAFTS_DIR = Path("data/drafts")
+STORAGE_PATH = Path("data/state.sqlite3")
 
 # Business-rule constants, named so a reviewer can find and question them.
 SAFETY_MULTIPLIER = Fraction(3, 2)   # order enough for 1.5 months of average demand
@@ -343,18 +345,22 @@ def estimate_reorder_quantity(item: str) -> dict:
 # Tool 4: draft_requisition  (the only tool with a side effect: it saves a file)
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
-def draft_requisition(items: list[str], created_by: str = "unknown") -> dict:
+def draft_requisition(items: list[str], created_by: str = "unknown",
+                      tenant_id: str = DEFAULT_TENANT_ID,
+                      user_id: str = DEFAULT_USER_ID) -> dict:
     """
     Build a DRAFT purchase requisition for the given items and save it.
 
     items       list of item IDs or names chosen by the model, e.g. ["ITM001", "Rulers 30cm"]
     created_by  the logged-in user. Filled in by registry.py from the session,
                 NEVER by the model (so the AI cannot claim to be someone else).
+    tenant_id   trusted shop scope injected by the application, never by the model.
+    user_id     trusted user scope injected by the application, never by the model.
 
     Rules applied:
       - only LOW items get a line; well-stocked items go to "skipped" with the reason
       - quantity, supplier, line totals, budget and the +/-10% range are all computed here
-      - the draft is saved to data/drafts/<draft_id>.json with status
+    - the draft is saved to data/state.sqlite3 with status
         "DRAFT - AWAITING HUMAN APPROVAL"; nothing is sent to any supplier
     Returns the full draft record (or status NOT_CREATED if nothing qualified).
     """
@@ -432,11 +438,9 @@ def draft_requisition(items: list[str], created_by: str = "unknown") -> dict:
         "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
     }
 
-    # The side effect: write the draft to disk so a human can review it.
-    DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = DRAFTS_DIR / f"{draft_id}.json"
-    path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    return {**record, "saved_to": path.as_posix()}
+    # The side effect: persist the draft centrally so a human can review it.
+    SQLiteStorage(STORAGE_PATH).save_draft(record, tenant_id, user_id)
+    return {**record, "saved_to": STORAGE_PATH.as_posix()}
 
 
 # ---------------------------------------------------------------------------

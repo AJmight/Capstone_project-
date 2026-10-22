@@ -91,7 +91,7 @@ def sandbox(data_files: dict | None = None):
     Drafts and traces go to the temp folder too; everything is restored afterwards.
     """
     tmp = Path(tempfile.mkdtemp())
-    saved = (procurement.DATA_DIR, procurement.DRAFTS_DIR, registry.TRACE_PATH)
+    saved = (procurement.DATA_DIR, procurement.DRAFTS_DIR, procurement.STORAGE_PATH, registry.TRACE_PATH)
     try:
         data = tmp / "data"
         data.mkdir()
@@ -103,10 +103,11 @@ def sandbox(data_files: dict | None = None):
                 (data / name).write_text(text, encoding="utf-8")
         procurement.DATA_DIR = data
         procurement.DRAFTS_DIR = tmp / "drafts"
+        procurement.STORAGE_PATH = data / "state.sqlite3"
         registry.TRACE_PATH = tmp / "tool_traces.jsonl"
         yield tmp
     finally:
-        procurement.DATA_DIR, procurement.DRAFTS_DIR, registry.TRACE_PATH = saved
+        procurement.DATA_DIR, procurement.DRAFTS_DIR, procurement.STORAGE_PATH, registry.TRACE_PATH = saved
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -183,7 +184,7 @@ def test_offline_09_draft_totals_and_record():
         assert r["estimated_budget_ugx"] == e1["total"] + e3["total"] == 84406
         assert r["budget_range_ugx"] == {"low": 75965, "high": 92847}
         assert r["status"] == "DRAFT - AWAITING HUMAN APPROVAL" and r["created_by"] == "Tester"
-        assert r["draft_id"].startswith("REQ-") and (tmp / "drafts" / f"{r['draft_id']}.json").exists()
+        assert r["draft_id"].startswith("REQ-") and (tmp / "data" / "state.sqlite3").exists()
 
 
 def test_offline_10_draft_skips_well_stocked():
@@ -199,7 +200,7 @@ def test_offline_11_nothing_low_creates_no_file():
     with sandbox() as tmp:
         r = procurement.draft_requisition(["ITM002", "Pencils HB"])
         assert r["status"] == "NOT_CREATED" and r["draft_id"] is None
-        assert not (tmp / "drafts").exists() or not list((tmp / "drafts").glob("REQ-*.json"))
+        assert not (tmp / "data" / "state.sqlite3").exists()
 
 
 def test_offline_12_safety_cap_flag():
@@ -318,7 +319,9 @@ def test_offline_21_human_approval_gate():
             raise AssertionError("a second decision was allowed")
         except approvals.ApprovalError:
             pass
-        assert len((tmp / "drafts" / "audit_log.jsonl").read_text().splitlines()) == 1
+        from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
+        assert len(SQLiteStorage(tmp / "data" / "state.sqlite3").list_audit(
+            DEFAULT_TENANT_ID, DEFAULT_USER_ID)) == 1
 
 
 def test_offline_22_capped_draft_needs_override_reason():

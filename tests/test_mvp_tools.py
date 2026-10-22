@@ -101,7 +101,9 @@ def test_offline_06_edit_quantity_logged():
         assert line["recommended_qty"] == 50 and line["ai_suggested_qty"] == 65
         assert line["total_cost_ugx"] == 50 * 476 and e["estimated_budget_ugx"] == 50 * 476 + 53466
         assert e["budget_range_ugx"]["low"] == (e["estimated_budget_ugx"] * 9 + 5) // 10
-        log = [json.loads(l) for l in (tmp / "drafts" / "audit_log.jsonl").read_text().splitlines()]
+        from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
+        log = SQLiteStorage(tmp / "data" / "state.sqlite3").list_audit(
+            DEFAULT_TENANT_ID, DEFAULT_USER_ID)
         assert log[-1]["decision"] == "EDITED" and log[-1]["ai_suggested_qty"] == 65
 
 

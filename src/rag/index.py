@@ -187,7 +187,18 @@ class BM25Index:
         return out
 
 
-@lru_cache(maxsize=1)
-def get_index() -> BM25Index:
-    """Build the index once per run (about 40 chunks: milliseconds)."""
-    return BM25Index(load_chunks())
+TENANTS_ROOT = Path("tenants")
+
+
+def _tenant_corpus(tenant_id: str) -> Path:
+    """Resolve corpus from trusted tenant context, with the prototype fallback."""
+    if not isinstance(tenant_id, str) or not tenant_id.strip():
+        raise ValueError("tenant_id is required for RAG access")
+    tenant_corpus = TENANTS_ROOT / tenant_id / "knowledge" / "corpus"
+    return tenant_corpus if tenant_corpus.exists() else CORPUS_DIR
+
+
+@lru_cache(maxsize=32)
+def get_index(tenant_id: str = "default-shop") -> BM25Index:
+    """Build and cache one BM25 index per trusted tenant."""
+    return BM25Index(load_chunks(_tenant_corpus(tenant_id)))
