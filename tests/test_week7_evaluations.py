@@ -154,7 +154,11 @@ class TestWeek7EvaluationSuite(unittest.TestCase):
     def test_scen_10_edge_item_without_purchase_history(self):
         """[SCEN_10: Edge] Items ITM011-ITM015 with zero history require human quantity flag."""
         res = procurement.estimate_reorder_quantity("ITM011")
-        self.assertTrue(res.get("requires_human_override") or res.get("recommended_order_quantity", 0) == 0)
+        # No purchase history -> the tool must NOT invent a quantity.
+        self.assertEqual(res["months_of_history"], 0)
+        self.assertEqual(res["recommended_qty"], 0)
+        # ...and it must say why, so the human knows a number is missing.
+        self.assertIn("human", res["basis"].lower())
 
     def test_scen_11_edge_whitespace_only_user_prompt(self):
         """[SCEN_11: Edge] Blank or whitespace prompt rejected cleanly."""
@@ -273,6 +277,14 @@ class TestWeek7EvaluationSuite(unittest.TestCase):
         # TERMINATED is valid safe exit
         term = self.state_mgr.transition_to(sess.session_id, WorkflowStage.TERMINATED, "Cancelled")
         self.assertEqual(term.stage, WorkflowStage.TERMINATED)
+
+        # APPROVED is NOT reachable from INITIALIZED: the only way into APPROVED is
+        # AWAITING_APPROVAL -> APPROVED, and that transition is the human's alone.
+        # The FSM must refuse the jump, which is what makes "the AI cannot approve"
+        # a property of the code rather than a promise in the prompt.
+        sess2 = self.state_mgr.create_session("shop_01", "Arnold", 100000)
+        with self.assertRaises(ValueError):
+            self.state_mgr.transition_to(sess2.session_id, WorkflowStage.APPROVED, "skipping approval")
 
     # =========================================================================
     # CATEGORY 6: UNAUTHORIZED ACTIONS & BOUNDARY VIOLATIONS (5 Scenarios)
