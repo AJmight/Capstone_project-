@@ -73,6 +73,8 @@ from google.genai import types                # SDK request/response types
 
 from ai_engine import load_system_prompt      # reads only the BEGIN/END part of a prompt file
 from llm_client import AllModelsFailedError, MODELS, call_with_fallback, client
+from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
+from tools import procurement
 from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations
 
 # ---------------------------------------------------------------------------
@@ -153,7 +155,9 @@ def _write_trace(record: dict) -> None:
 def run_agent(user_message: str, user_name: str = "shop user",
               system_prompt: str | None = None, max_turns: int = MAX_TURNS,
               max_tool_calls: int = MAX_TOOL_CALLS, on_tool_result=None,
-              trace_label: str = "tool_agent", allowed_tools: set[str] | None = None) -> dict:
+              trace_label: str = "tool_agent", allowed_tools: set[str] | None = None,
+              tenant_id: str = DEFAULT_TENANT_ID, user_id: str = DEFAULT_USER_ID,
+              session_id: str | None = None) -> dict:
     """
     Answer one user message, letting the model call tools, within strict limits.
 
@@ -165,10 +169,18 @@ def run_agent(user_message: str, user_name: str = "shop user",
     allowed_tools optional TASK allow-list (Week 5). Only these tools are shown to the model,
                   and any other tool request is blocked with NOT_IN_TASK_CONTRACT
     trace_label   written into the run trace so different agents can be told apart
+    tenant_id/user_id trusted shop and user scope supplied by the application, never the model
+    session_id    optional persistent session identifier; a new run ID is used when omitted
     Returns a dict: run_id, final_text, stopped_reason, turns_used, steps, tool_calls,
                     models_used, drafts_created, latency_s
     """
     run_id = uuid.uuid4().hex[:8]                       # short ID to find this run in the traces
+    session_id = session_id or f"session-{run_id}"
+    storage = SQLiteStorage(procurement.STORAGE_PATH)
+    storage.start_session(session_id, tenant_id, user_id)
+    storage.save_session_state(session_id, tenant_id, user_id,
+                               {"status": "RUNNING", "run_id": run_id,
+                                "user_message": user_message, "trace_label": trace_label})
     started = time.monotonic()
     system_prompt = system_prompt or load_system_prompt(PROMPT_PATH)
 
@@ -241,8 +253,10 @@ def run_agent(user_message: str, user_name: str = "shop user",
                 result, status = {"error": "REPEATED_CALL: you already called this tool with these "
                                            "arguments; use the earlier result"}, "blocked"
             else:
-                result, status = execute_tool(call.name, args,
-                                              context={"created_by": user_name}, run_id=run_id)
+                result, status = execute_tool(
+                    call.name, args,
+                    context={"created_by": user_name, "tenant_id": tenant_id, "user_id": user_id},
+                    run_id=run_id)
                 call_history.setdefault(key, []).append(result)
             if on_tool_result:
                 on_tool_result(call.name, args, result, status, turn, model, steps[-1]["model_text"])
@@ -266,6 +280,11 @@ def run_agent(user_message: str, user_name: str = "shop user",
 
     # Output check: never let the answer claim a draft that does not exist (F-13).
     final_text, output_warnings = check_output(final_text, drafts)
+    storage.save_session_state(session_id, tenant_id, user_id,
+                               {"status": "COMPLETED", "run_id": run_id,
+                                "user_message": user_message, "trace_label": trace_label,
+                                "stopped_reason": stopped_reason, "drafts_created": drafts,
+                                "tool_calls": len(tool_calls), "turns_used": turn})
     result = {
         "run_id": run_id,
         "final_text": final_text,

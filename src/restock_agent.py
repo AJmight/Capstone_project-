@@ -62,6 +62,7 @@ from datetime import datetime, timezone       # timestamps
 from pathlib import Path                      # file paths
 
 from tools import procurement                 # DRAFT_STATUS, DRAFTS_DIR
+from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 from tools.registry import execute_tool
 from tool_agent import run_agent              # the bounded model <-> tool loop (Week 4, extended)
 
@@ -205,7 +206,10 @@ def _handoffs(state: AgentState) -> list[str]:
 # The agent run
 # ---------------------------------------------------------------------------
 def run_restock(budget_ugx: int, user_name: str = "shop user",
-                save_trace_as: str | None = None) -> dict:
+                save_trace_as: str | None = None,
+                tenant_id: str = DEFAULT_TENANT_ID,
+                user_id: str = DEFAULT_USER_ID,
+                session_id: str | None = None) -> dict:
     """Run the weekly restock task once. Returns the full run record (also logged)."""
     state = AgentState(goal=GOAL, budget_ugx=budget_ugx, user_name=user_name)
     run, final_text = None, ""
@@ -221,7 +225,10 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         final_text = "Cannot start the restock task: " + "; ".join(problems) + "."
     else:
         # ---- 1. SENSE (code, through the registry so it is traced and validated) ----
-        sense, status = execute_tool("get_low_stock", {}, run_id="sense")
+        sense, status = execute_tool("get_low_stock", {},
+                         context={"created_by": user_name,
+                              "tenant_id": tenant_id, "user_id": user_id},
+                         run_id="sense")
         if "error" in sense:
             state.log("SENSE", f"failed: {sense['error']}")
             state.outcome = "HANDOFF_SENSE_FAILED"
@@ -239,7 +246,8 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                    f"Requested by: {user_name}\n\n[SENSE]\n" + json.dumps(state.low_items, indent=1))
         run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
                         max_tool_calls=MAX_TOOL_CALLS, on_tool_result=state.observe,
-                        trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS)
+                        trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS,
+                        tenant_id=tenant_id, user_id=user_id, session_id=session_id)
         final_text = run["final_text"]
         if run["steps"] and not run["steps"][-1]["tool_requests"]:
             state.log("PLAN/DECIDE", f"turn {run['steps'][-1]['turn']} ({run['steps'][-1]['model']}) "
@@ -264,12 +272,12 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
 
         # Tell the approver if the agent's own checks failed on a draft it created.
         if state.drafts_created:
-            path = procurement.DRAFTS_DIR / f"{state.drafts_created[0]}.json"
-            if path.exists():
-                record = json.loads(path.read_text(encoding="utf-8"))
+            storage = SQLiteStorage(procurement.STORAGE_PATH)
+            record = storage.load_draft(state.drafts_created[0], tenant_id, user_id)
+            if record is not None:
                 record["agent_checks"] = {"outcome": state.outcome, "postconditions": state.postconditions,
                                           "budget_ugx": budget_ugx}
-                path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+                storage.update_draft(record, tenant_id, user_id)
 
     state.handoffs = _handoffs(state)
     state.log("STOP", f"outcome {state.outcome}"

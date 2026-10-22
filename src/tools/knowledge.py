@@ -13,10 +13,10 @@ Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
 Version: 1.0.0
 """
 
-from rag.index import get_index               # BM25 index over knowledge/corpus/*.md
+from rag.index import get_index               # BM25 index selected by trusted tenant context
 
 
-def search_policy(query: str, top_k: int = 3) -> dict:
+def search_policy(query: str, top_k: int = 3, tenant_id: str = "default-shop") -> dict:
     """
     Search the shop's policy and procedure documents.
 
@@ -29,11 +29,11 @@ def search_policy(query: str, top_k: int = 3) -> dict:
     if not isinstance(query, str) or not query.strip():
         return {"error": "INVALID_PARAMETER: query must be a non-empty string"}
     top_k = max(1, min(int(top_k), 5))                  # keep the context small
-    hits = get_index().search(query, top_k=top_k)
+    hits = get_index(tenant_id).search(query, top_k=top_k)
     result = {"query": query,
               "results": [{"source_id": h["chunk_id"], "title": h["title"], "section": h["section"],
                            "text": h["text"], "score": h["score"]} for h in hits],
-              "source": "knowledge/corpus/"}
+              "source": f"tenant:{tenant_id}"}
     if not hits:
         result["note"] = "No relevant passage found in the shop documents."
     return result

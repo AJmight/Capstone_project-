@@ -28,7 +28,8 @@ Quick start after setup: `py src\app.py`
 | 4 | Tools and function calling | Done — 4 deterministic tools, registry, human approval gate; offline 22/22, live 6/6 (`docs/evaluation/week4-tool-evaluation.md`) |
 | 5 | Bounded agent | Done — Weekly Restock Agent with task contract, explicit state, pre/post-conditions; 4 live traces incl. failure/recovery; offline 16/16 (`docs/evaluation/week5-agent-evaluation.md`) |
 | MVP | Console app over Weeks 1–5 | `src/app.py`; all suites in `docs/evaluation/mvp-evaluation.md` |
-| 6–8 | Memory, evaluation & guardrails, release | Not started — owners in `docs/ONBOARDING.md` §6 |
+| 6 | Persistent state, scoped memory and interoperability | Done — SQLite state, trusted tenant context, tenant-scoped RAG, MCP-style capability spec |
+| 7–8 | Evaluation, guardrails, release | Remaining — owners in `docs/ONBOARDING.md` §6 |
 
 ## Setup (Windows PowerShell)
 
@@ -108,7 +109,7 @@ All data is synthetic. Never commit `.env`; only `.env.example` (placeholders) i
 
 ## Team roles and what to do next
 
-Where we are (13 Oct 2026): **Weeks 1–5 are done (MVP).** Remaining: Week 6 (memory, state,
+Where we are (22 Oct 2026): **Weeks 1–6 are done (MVP + Week 6).** Remaining: Week 7 (evaluation,
 interoperability), Week 7 (30+ scenario evaluation, guardrails), Week 8 (release and final report,
 **hand-in 23 Oct**), presentations **27/29/30 Oct**. Every task below is a card on the team board —
 full checklists in [`docs/team/task-board.md`](docs/team/task-board.md) (importable:

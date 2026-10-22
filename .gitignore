@@ -6,3 +6,5 @@ debug.log
 
 # Draft requisitions created at runtime by the agent (review with src/approvals.py)
 data/drafts/
+data/state.sqlite3
+tenants/*/data/state.sqlite3

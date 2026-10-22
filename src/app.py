@@ -34,7 +34,19 @@ Version: 0.6.0 (single trusted user: roles removed)
 # Imports (heavy modules that need the API key are imported only when used)
 # ---------------------------------------------------------------------------
 import approvals                               # human approval gate (no AI)
+from memory import (MemoryError, forget_usual_weekly_budget,
+                    remember_usual_weekly_budget, recall_usual_weekly_budget)
+from storage import DEFAULT_TENANT_ID, SQLiteStorage
 from tools import procurement                  # deterministic tools (no AI)
+
+
+def _user_id(user: str) -> str:
+    """Create a stable local ID from the trusted name entered at app login."""
+    return user.strip().casefold() or "default-user"
+
+
+def _storage() -> SQLiteStorage:
+    return SQLiteStorage(procurement.STORAGE_PATH)
 
 
 def ask(prompt: str, default: str = "") -> str:
@@ -60,11 +72,14 @@ def action_ask(user: str) -> None:
 
 def action_restock(user: str) -> None:
     from restock_agent import run_restock      # needs GEMINI_API_KEY
-    budget = ask("Weekly budget in UGX", "300000").replace(",", "")
+    remembered = recall_usual_weekly_budget(_storage(), DEFAULT_TENANT_ID, _user_id(user))
+    default = str(remembered) if remembered is not None else "300000"
+    budget = ask("Weekly budget in UGX (Enter to use usual budget)", default).replace(",", "")
     if not budget.isdigit():
         print("Budget must be a whole number, e.g. 300000.")
         return
-    rec = run_restock(int(budget), user_name=user)
+    rec = run_restock(int(budget), user_name=user, tenant_id=DEFAULT_TENANT_ID,
+                      user_id=_user_id(user))
     for e in rec["state"]["timeline"]:
         print(f"  {e['phase']:<14} {e['detail'][:110]}")
     print(f"\nOUTCOME: {rec['outcome']}\n\n{rec['final_text']}")
@@ -128,11 +143,30 @@ def action_stock(user: str) -> None:
         print(f"  {i['item_id']} {i['item_name']:<26} stock {i['current_stock']:>3} / reorder {i['reorder_point']:>3}{flag}")
 
 
+def action_budget_memory(user: str) -> None:
+    """Let the trusted user explicitly set or delete the convenience budget."""
+    storage = _storage()
+    tenant_id, user_id = DEFAULT_TENANT_ID, _user_id(user)
+    current = recall_usual_weekly_budget(storage, tenant_id, user_id)
+    print(f"Current usual weekly budget: UGX {current:,}" if current else "No usual weekly budget saved.")
+    choice = ask("Enter a new budget, or type DELETE", str(current or "")).strip()
+    if choice.upper() == "DELETE":
+        forget_usual_weekly_budget(storage, tenant_id, user_id)
+        print("Usual weekly budget deleted.")
+        return
+    try:
+        remember_usual_weekly_budget(storage, tenant_id, user_id, int(choice.replace(",", "")))
+        print("Usual weekly budget saved. It is only a default; you confirm each restock budget.")
+    except (ValueError, MemoryError) as error:
+        print(f"Could not save budget: {error}")
+
+
 MENU = [("Ask the assistant (AI + tools)", action_ask),
         ("Weekly restock (bounded agent)", action_restock),
         ("Policy question (RAG with citations)", action_policy),
         ("Review drafts (human approval)", action_review),
-        ("Stock overview (no AI)", action_stock)]
+        ("Stock overview (no AI)", action_stock),
+        ("Set usual weekly budget (memory)", action_budget_memory)]
 
 
 def main() -> None:

@@ -107,7 +107,7 @@ TOOL_REGISTRY = {
     "draft_requisition": {
         "function": procurement.draft_requisition,
         "side_effect": "writes a draft file",
-        "context_args": ["created_by"],       # filled from the session in step 3, never by the model
+        "context_args": ["created_by", "tenant_id", "user_id"],
         "declaration": {
             "name": "draft_requisition",
             "description": ("Create and save a DRAFT purchase requisition for the listed items. "
@@ -177,6 +177,7 @@ TOOL_REGISTRY["query_purchase_history"] = {
 TOOL_REGISTRY["search_policy"] = {
     "function": knowledge.search_policy,
     "side_effect": "none",
+    "context_args": ["tenant_id"],
     "declaration": {
         "name": "search_policy",
         "description": ("Search the shop's policy and procedure documents (approval limits, payments, "
@@ -193,6 +194,10 @@ TOOL_REGISTRY["search_policy"] = {
 
 # Error codes worth ONE retry of the same call (a temporary problem, not a wrong request).
 RETRYABLE_ERRORS = ("SERVICE_UNAVAILABLE",)
+
+# These values identify the trusted application session. They are never valid
+# model arguments, even if a future tool declaration accidentally exposes them.
+PROTECTED_CONTEXT_ARGS = {"created_by", "tenant_id", "user_id"}
 
 # Fault injection state: {tool_name: number of upcoming calls that should fail}.
 _FAULTS: dict[str, int] = {}
@@ -301,7 +306,8 @@ def execute_tool(name: str, args: dict | None, context: dict | None = None,
 
     name    tool name the model asked for
     args    arguments the model sent (may be None)
-    context trusted values from the session, e.g. {"created_by": "Arnold"}
+    context trusted values from the session, e.g. {"created_by": "Arnold",
+                    "tenant_id": "shop-a", "user_id": "user-a"}
     run_id  agent run ID, written to the trace so calls can be grouped
 
     Returns (result_dict, status) where status is one of
@@ -316,11 +322,14 @@ def execute_tool(name: str, args: dict | None, context: dict | None = None,
     if spec is None:                                                       # step 1
         result, status = {"error": f"UNAUTHORIZED_TOOL: '{name}' is not on the allow-list"}, "blocked"
     else:
-        problem = _validate_args(name, args, spec["declaration"]["parameters_json_schema"])  # step 2
+        protected = sorted(PROTECTED_CONTEXT_ARGS.intersection(args))
+        problem = (f"INVALID_PARAMETER: trusted context must not be supplied by the model: "
+                   f"{', '.join(protected)}" if protected else
+                   _validate_args(name, args, spec["declaration"]["parameters_json_schema"]))  # step 2
         if problem:
             result, status = {"error": problem}, "invalid"
         else:
-            # Step 3: add trusted context values (e.g. created_by) that the model never controls.
+            # Step 3: add trusted context values that the model never controls.
             trusted = {k: context[k] for k in spec.get("context_args", []) if k in context}
             try:                                                           # step 4
                 if _FAULTS.get(name, 0) > 0:
@@ -345,6 +354,8 @@ def execute_tool(name: str, args: dict | None, context: dict | None = None,
         "run_id": run_id,
         "tool": name,
         "user": context.get("created_by"),
+        "tenant_id": context.get("tenant_id"),
+        "user_id": context.get("user_id"),
         "args": args,
         "status": status,
         "latency_ms": round((time.monotonic() - started) * 1000, 1),

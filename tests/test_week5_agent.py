@@ -237,8 +237,10 @@ def test_offline_06_greedy_model_caught():
     with sandbox() as tmp, fake_model(greedy_policy):
         rec = restock_agent.run_restock(300000)
         assert rec["outcome"] == "POSTCONDITION_FAILED", rec["outcome"]
-        draft_file = tmp / "drafts" / f"{rec['state']['drafts_created'][0]}.json"
-        assert json.loads(draft_file.read_text())["agent_checks"]["outcome"] == "POSTCONDITION_FAILED"
+        from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
+        draft = SQLiteStorage(tmp / "data" / "state.sqlite3").load_draft(
+            rec["state"]["drafts_created"][0], DEFAULT_TENANT_ID, DEFAULT_USER_ID)
+        assert draft["agent_checks"]["outcome"] == "POSTCONDITION_FAILED"
 
 
 def test_offline_07_double_draft_caught():

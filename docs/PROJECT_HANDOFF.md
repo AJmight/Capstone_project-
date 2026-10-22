@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-06 (MVP: Weeks 1–5 complete; next Week 6). AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
+**Last updated:** 2026-10-22 (Weeks 1–6 complete; next Week 7). AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -137,7 +137,7 @@ Record: `docs/requirements/decision-001-single-trusted-user.md`.
 1. ~~Week 4 tools~~ — done.
 2. ~~Week 5~~ — done.
 3. ~~Week 3~~ — done (the Lead is studying the concept: `docs/notes/rag-explained.md`; pause further RAG changes until they ask).
-4. Week 6 (AI Lead): SQLite state for drafts/audit, one justified memory, MCP-style interface. Weeks 7–8 per the brief; role owners in `docs/ONBOARDING.md` §6.
+4. Week 6 (AI Lead): SQLite state for drafts/audit, scoped sessions and memory, trusted tenant context, tenant-scoped RAG and MCP-style interface. Weeks 7–8 per the brief; role owners in `docs/ONBOARDING.md` §6.
 5. Weeks 6–8 per the brief. Groq can be added as a cross-provider fallback in `llm_client.py`.
 
 ## 9. Corrections to the earlier handoff draft

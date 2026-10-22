@@ -148,7 +148,9 @@
     },
     {
       "side_effect": "none",
-      "context_args_injected_by_system": [],
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "name": "search_policy",
       "description": "Search the shop's policy and procedure documents (approval limits, payments, supplier delivery/returns/terms, reorder guidelines, supplier pressure). Returns passages with source_id. Use it for ANY policy or process question and cite the source_id; never answer policy questions from memory.",
       "parameters_json_schema": {

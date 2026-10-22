@@ -12,7 +12,7 @@
 
 1. `src/tool_agent.py` sends the user's question and the **declarations of the tools** (all of them, or a task's allow-list) to Gemini.
 2. Gemini replies with a function call, e.g. `estimate_reorder_quantity(item="Rulers 30cm")`.
-3. `registry.execute_tool()` checks **allow-list → arguments**, injects trusted context (`created_by`), runs the Python function, catches crashes, and writes a trace line.
+3. `registry.execute_tool()` checks **allow-list → arguments**, injects trusted context (`created_by`, `tenant_id`, `user_id`), runs the Python function, catches crashes, and writes a trace line.
 4. The result dictionary goes back to Gemini, which explains it. **Every number comes from Python.**
 
 ## Who can use the tools
@@ -66,8 +66,8 @@ action in `src/approvals.py` (see the end of this document).
 | **Input** | `items: array of string` (1–20 IDs or names). `created_by` is **injected by the system** from the session user; the model sending it is rejected (`INVALID_PARAMETER`) |
 | **Output** | `{"draft_id": "REQ-YYYYMMDD-HHMMSS-XXXX", "created_at", "created_by", "status": "DRAFT - AWAITING HUMAN APPROVAL", "lines": [...], "skipped": [...], "estimated_budget_ugx", "budget_range_ugx": {low, high}, "requires_override_any", "decision": null, "saved_to"}`; or `{"status": "NOT_CREATED", ...}` if nothing is low |
 | **Rules** | only low items get lines; well-stocked items go to `skipped` with the reason; totals and ±10 % range computed in integers |
-| **Reads / writes** | reads all CSVs; **writes** `data/drafts/<draft_id>.json` (git-ignored) |
-| **Permission / side effects** | draft / **low-risk simulated side effect**: a file is saved; nothing is sent, ordered or paid |
+| **Reads / writes** | reads all CSVs; **writes** a scoped draft to `data/state.sqlite3` |
+| **Permission / side effects** | draft / **low-risk simulated side effect**: SQLite state is saved; nothing is sent, ordered or paid |
 | **Failure behaviour** | `INVALID_PARAMETER` (empty/too many items), `UNKNOWN_ITEM`, `AMBIGUOUS_ITEM`, `INVALID_DATA` |
 
 Covers User Stories 2, 4, 5 (unique ID, date, creator), 7 (reasoning trail), 8 (budget range), 12 (200 % cap flag).
@@ -111,13 +111,13 @@ Covers User Stories 2, 4, 5 (unique ID, date, creator), 7 (reasoning trail), 8 (
 | **Input** | `query: string`, `top_k: integer 1–5` (default 3) |
 | **Output** | `{"query", "results": [{source_id, title, section, text, score}], "note"?}` — `source_id` such as `POL-01#approval-thresholds` must be cited |
 | **Failure** | empty `results` + note when nothing scores above the minimum; `INVALID_PARAMETER` |
-| **Permission / side effects** | read / none — implemented in `src/tools/knowledge.py` on top of `src/rag/index.py` |
+| **Permission / side effects** | read / none — implemented in `src/tools/knowledge.py` on top of a tenant-keyed `src/rag/index.py` |
 
 ## Human edit before approval (MVP, User Story 9)
 
 `py src\approvals.py edit <draft_id> --item ITM001 --qty 50 --by "Name" --reason "..."` — only on drafts
 awaiting approval; keeps `ai_suggested_qty` and an `edits` list on the line; recalculates line total,
-budget, ±10 % range and the 200 % cap flag; appends an `EDITED` entry to `audit_log.jsonl`.
+budget, ±10 % range and the 200 % cap flag; appends an `EDITED` event to SQLite.
 
 ## Executor errors (from `registry.execute_tool`)
 
@@ -147,7 +147,7 @@ draft or draft ID that was not created in that run and adds a system notice (fai
 
 Rules: only drafts still awaiting approval can be decided; rejection needs a reason (AC 10.3);
 approving a draft with a capped line needs an override reason (US 12); every decision is appended to
-`data/drafts/audit_log.jsonl` (AC 11.3). Approval records a decision only — ordering and payment stay
+SQLite's `audit_events` table (AC 11.3). Approval records a decision only — ordering and payment stay
 manual and outside the system.
 
 ## Observability

@@ -48,14 +48,15 @@ EXPAND_NEIGHBOURS = True        # also give the model the next section of each r
 NOT_FOUND = "That information is not in the provided documents."
 
 
-def retrieve(question: str, top_k: int = TOP_K, expand: bool = EXPAND_NEIGHBOURS) -> list[dict]:
+def retrieve(question: str, top_k: int = TOP_K, expand: bool = EXPAND_NEIGHBOURS,
+             tenant_id: str = "default-shop") -> list[dict]:
     """
     Best chunks for the question. With expand=True, each hit is followed by the NEXT
     chunk of the same document ("small-to-big" retrieval). Fixes the Week 3 failure where
     the question matched a section heading ("The problem") but the answer was in the
     following section ("What staff should do").
     """
-    index = get_index()
+    index = get_index(tenant_id)
     hits = index.search(question, top_k=top_k)
     if not expand:
         return hits
@@ -90,9 +91,10 @@ def check_citations(answer: str, n_sources: int) -> dict:
     return {"cited": cited, "invalid": invalid, "is_refusal": refusal, "citations_ok": ok}
 
 
-def answer_policy_question(question: str, label: str = "policy_qa") -> dict:
+def answer_policy_question(question: str, label: str = "policy_qa",
+                           tenant_id: str = "default-shop") -> dict:
     """Full RAG pipeline for one question. Returns answer, sources, citation check, model."""
-    sources = retrieve(question)
+    sources = retrieve(question, tenant_id=tenant_id)
     record = {"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
               "question": question,
               "retrieved": [{"label": f"S{i}", "chunk_id": s["chunk_id"], "score": s["score"]}
