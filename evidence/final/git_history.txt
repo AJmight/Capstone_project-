@@ -1,0 +1,16 @@
+* 52e7473 (HEAD -> main) Week 8 hardening: MCP contract, approval-to-FSM link, tenant binding, release checks
+* 2e5430e Week 7: deterministic guardrails, 31-scenario evaluation and failure catalogue
+* d096ee6 Week 6: explicit state machine, justified memory and MCP interface
+* 8f2761d (origin/main, origin/HEAD) Single trusted user: regression results (completes 2655b66)
+* 2655b66 Week 5: agent task contract, three execution traces, bounded autonomy evidence
+* e8817c1 Correct registration number to 23/U/24738/PS in all documents
+* 7bd3f9b Docs: Week 3/5 reference, data-protection plan, team board; tool-limit test
+* e615682 (tag: week3-complete, tag: mvp-week5) MVP up to Week 5: Week 3 RAG, Week 1 docs, missing user stories, app, onboarding
+* 4458893 (tag: week5-complete) Week 5 complete: bounded weekly restock agent, task contract, traces
+* 6624dda (tag: week4-complete) Week 4 complete: deterministic tools, function calling, human approval gate
+* 13cbf52 (tag: week2-complete) Week 2 complete: prompt v1.2.0, model fallback client, 10-case evaluation
+* 25d1299 Remove debug.log from tracking and add to gitignore
+* 43ff394 final wee2 commit
+* 130faa7 Week 2: Add working model connection with retry logic and synthetic data generator
+* 0f6d8f4 Add model selection details to README
+* d4d09bb Add files via upload
