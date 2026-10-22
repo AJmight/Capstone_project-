@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-22 (Weeks 1–6 complete; next Week 7). AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
+**Last updated:** 2026-10-20 (evening — Weeks 1–8 complete, release `v1.0.0` cut; **left to do: the slide deck, the demo screenshots, the MUELE upload and the contribution rows**). AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -10,7 +10,7 @@ This replaces an earlier handoff draft that contained outdated facts (listed in 
 - **Dates:** 31 Aug – 23 Oct 2026; presentations 27/29/30 Oct 2026
 - **Repo:** https://github.com/AJmight/Capstone_project- (`main`); local `C:\Users\user\Capstone_project-`
 - **AI Engineering Lead:** Mwesigwa Arnold Mugahi (23/U/24738/PS), GitHub AJmight. Other roles: TBD.
-- **AI tools used:** Gemini (product model + proof-reading), Claude Code (coding partner), DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline fixes).
+- **AI tools used:** Gemini (product model + proof-reading), Claude Code (Weeks 1–5 coding partner), agy / Google Antigravity CLI (Weeks 6–7 coding partner), DeepSeek (supervisor/teacher), ChatGPT (concept explanations), GitHub Copilot (inline fixes).
 - **Code style rule:** comment every module, section and significant line (groupmates review the code).
 - Weekly deadlines are not graded separately; everything is handed in at the end of October. Order chosen: Week 2 → 4 → 5 → 3 (all done) → 6–8. Week 1 docs consolidated into `docs/requirements/` on 2026-10-06.
 
@@ -87,12 +87,13 @@ Results: offline 22/22, live 6/6. **F-04 closed.** New: F-07 (model requested a 
 | `src/tools/procurement.py` `plan_within_budget` | Tool 5: urgency order (stock/reorder point), greedy skip-and-continue within budget; included / deferred / needs_human |
 | `src/tool_agent.py` v1.2.0 | + per-turn steps, repeated-call guard (one retry after SERVICE_UNAVAILABLE), `allowed_tools`, observer hook, `check_output()` against false draft claims |
 | `src/tools/registry.py` v1.1.0 | + whole-float → int, `minimum`, fault injection (`inject_fault`, `AGENT_FAULTS`, marked `injected`) |
-| `tests/test_week5_agent.py` | 16 offline (scripted fake model) + 4 live traces |
+| `tests/test_week5_agent.py` | 17 offline (scripted fake model) + 4 live traces |
 | `docs/requirements/agent-task-contract.md`, `docs/architecture/architecture-week5.md`, `docs/evaluation/week5-agent-evaluation.md`, `docs/weekly-reports/week5-*.md`, `evidence/week5/trace_T1…T4.md` | Week 5 deliverables and trail |
 
-Results: offline 16/16 (+ Week 4 22/22), traces 4/4, Week 4 live regression 6/6 after F-13 fix.
-New findings: F-12 (±10 % range can exceed budget — open), F-13 (false draft claim — fixed in code + prompt),
-F-14 (prompt contradiction — fixed v2.2.1), F-15 (floats from Gemini — fixed).
+Results: offline 17/17 (+ Week 4 22/22), traces 4/4, Week 4 live regression 6/6 after F-13 fix.
+New findings: F-12 (±10 % range can exceed budget — **fixed in Week 7** by `src/guardrails.py`),
+F-13 (false draft claim — fixed in code + prompt), F-14 (prompt contradiction — fixed v2.2.1),
+F-15 (floats from Gemini — fixed).
 
 ## 6d. Week 3 (RAG) and MVP additions — 2026-10-06
 
@@ -125,20 +126,53 @@ cannot approve/order/pay (no tool); approval stays a human step. Cross-user leak
 data reaching another shop's session) — the isolation plan is in `data-protection-and-multi-user.md`.
 Record: `docs/requirements/decision-001-single-trusted-user.md`.
 
+## 6g. Week 8 (release) — 2026-10-20
+
+| File | Purpose |
+|:---|:---|
+| `docs/final-report.md` | The 8–12 page Capstone Report (brief §9) + Appendix G (deck outline & demo script) |
+| `tests/test_week8_release_checks.py` | 19 release checks: MCP contract, approval→FSM, tenant binding, guardrails in the runtime path |
+| `evidence/final/` | Release evidence pack: `README.md` index, `regression_run_2026-10-20.md`, `release-checklist.md` |
+| `docs/weekly-reports/week8-report.md`, `week8-ai-log.md`, `week8-engineering-trail.md` | Week 8 deliverables and trail |
+| `docs/evaluation/failure-catalogue.md` | Re-based to F-01…F-25 (F-23/F-24/F-25 were found and fixed in the release pass) |
+
+Changes made in the release pass (all with re-tests):
+- **F-23** — MCP `draft_requisition` could be called without the tenant context; now rejected by the dispatcher.
+- **F-24** — approving a draft did not move the state machine; approval now performs the FSM transition.
+- **F-25** — the `search_policy` tool was missing from the MCP capability list; now exposed and listed.
+- The Week 7 guardrails are now **wired into the running app** (`src/app.py` screens the user's input,
+  `src/restock_agent.py` enforces the budget ceiling), so they protect the demo path, not only the tests.
+- The offline regression is now **105 of 105** (Week 4 22/22 · Week 5 17/17 · MVP 7/7 ·
+  RAG hit@3 10/10 · Week 6 9/9 · Week 7 31/31 · Week 8 19/19) — see
+  `evidence/final/regression_run_2026-10-20.md` for the verbatim output.
+- Release tag: `v1.0.0`.
+
 ## 7. Known issues
 
-- F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (document in final report).
+- F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (documented in the final report).
+- F-12 (the ±10 % range could exceed the budget) — **closed** in Week 7 by `src/guardrails.py`; the ceiling is
+  now enforced in code inside `src/restock_agent.py`, not only checked in the prompt.
 - v1.2.0 has not yet been evaluated on `gemini-3.8-flash` (quota exhausted during runs).
 - Week 1 documents exist only as `.docx`; `docs/requirements/` should hold the charter, user stories and AI Boundary Matrix.
 - User stories mention sugar/dairy/cooking oil sales; the data is stationery purchases. Align stories with data.
+- **No CI yet** (DO-2 open): the seven offline suites are only run by hand, so nothing catches a regression on push.
+- **No web UI**: the release is the console app (`py src\app.py`). AP-2/AP-3 stay optional.
+- The contribution rows in `docs/weekly-reports/week*-report.md` are still `[name]` placeholders (PR-3 open).
+- `evidence/final/screenshots/` is empty — the demo screenshots are still to be captured (AP-4 open).
 
 ## 8. Next steps (priority order)
 
 1. ~~Week 4 tools~~ — done.
 2. ~~Week 5~~ — done.
 3. ~~Week 3~~ — done (the Lead is studying the concept: `docs/notes/rag-explained.md`; pause further RAG changes until they ask).
-4. Week 6 (AI Lead): SQLite state for drafts/audit, scoped sessions and memory, trusted tenant context, tenant-scoped RAG and MCP-style interface. Weeks 7–8 per the brief; role owners in `docs/ONBOARDING.md` §6.
-5. Weeks 6–8 per the brief. Groq can be added as a cross-provider fallback in `llm_client.py`.
+4. ~~Week 6 (State, Memory, MCP)~~ — done (`src/state.py`, `src/memory.py`, `src/mcp_interface.py`, tests 9/9 passed).
+5. ~~Week 7 (Evaluation & Guardrails)~~ — done (`src/guardrails.py`, 31-scenario dataset, tests 31/31 passed, failure catalogue F-01..F-25 after the Week 8 re-basing).
+6. ~~Week 8 hardening, release and final report~~ — done (`tests/test_week8_release_checks.py` 19/19, F-23/F-24/F-25 fixed, tag `v1.0.0`, `docs/final-report.md`).
+7. **Build the 8-slide deck** from `docs/final-report.md` Appendix G and rehearse it twice (25 Oct) — PR-7.
+8. **Capture the 5 demo screenshots** into `evidence/final/screenshots/` and put them in the deck (21–22 Oct) — AP-4.
+9. **Fill the contribution rows** in `docs/weekly-reports/week1…8-report.md` with what each person really did (22 Oct) — PR-3.
+10. **Upload to MUELE** (report + code + evidence pack) and keep the receipt (23 Oct) — PR-8.
+11. Optional but cheap: **GitHub Actions** running the seven offline suites on every push (DO-2).
 
 ## 9. Corrections to the earlier handoff draft
 

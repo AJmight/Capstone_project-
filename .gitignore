@@ -8,3 +8,9 @@ debug.log
 data/drafts/
 data/state.sqlite3
 tenants/*/data/state.sqlite3
+
+# Runtime SQLite store (Week 6/7): sessions, state transitions and justified memory.
+# It is created on first run and is rebuilt by any clean clone, so it is not source.
+data/procurement.db
+data/procurement.db-shm
+data/procurement.db-wal

@@ -1,6 +1,6 @@
 # Week 4 Offline Tool Tests
 
-Run at 2026-10-22T18:51:08 | **22/22 passed**
+Run at 2026-10-22T08:38:45 | **22/22 passed**
 
 | id | test | passed | detail |
 |---|---|---|---|
@@ -20,7 +20,7 @@ Run at 2026-10-22T18:51:08 | **22/22 passed**
 | O-14 | A CSV without reorder_point, or with a non-number, gives INVALID_DATA naming the problem. | **PASS** |  |
 | O-15 | Asking for a tool that is not on the allow-list (e.g. approve_requisition) is blocked. | **PASS** |  |
 | O-16 | The agent is offered every tool, and none of them can approve, order, pay or contact anyone.
-    (Replaces the old viewer-role test: user roles were removed on 2026-10-13 - single trusted user.) | **PASS** |  |
+(Replaces the old viewer-role test: user roles were removed on 2026-10-13 - single trusted user.) | **PASS** |  |
 | O-17 | Missing, extra, wrong-type and empty arguments are rejected before the tool runs. | **PASS** |  |
 | O-18 | created_by comes from the session; the model trying to set it is rejected. | **PASS** |  |
 | O-19 | A crashing tool -> TOOL_ERROR; a tool returning a non-dict -> UNEXPECTED_RESPONSE. | **PASS** |  |

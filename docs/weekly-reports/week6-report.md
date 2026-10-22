@@ -1,62 +1,50 @@
-# Week 6 Progress Report - Memory, State and Interoperability
+# BSE4104 AI Agentic Capstone: Week 6 Progress Report
+**Topic:** Memory, State, and Interoperability  
+**Student:** Mwesigwa Arnold Mugahi (Reg No: 23/U/24738/PS, GitHub: AJmight)  
+**Role:** AI Engineering Lead  
+**Dates:** 5th October – 9th October 2026 (Consolidated: 20th October 2026)  
+**Convener:** Dr. Kamulegeya Grace B (PhD)  
 
-| Field | Value |
-|:---|:---|
-| Group | [group name] |
-| Project | SME Procurement Support Agent |
-| Week | 6 |
-| Prepared by | Mwesigwa Arnold Mugahi (23/U/24738/PS) |
-| Status | Completed |
+---
 
-## 1. Work completed
+## 1. Executive Summary & Goals
+During Week 6, the SME Procurement Preparation Agent progressed from a stateless, bounded tool loop into an explicit, state-aware, and interoperable system. In accordance with the project syllabus, we achieved three primary milestones:
+1. **Explicit Workflow State Machine:** Replaced transient conversational context with a persistent Finite State Machine (FSM) backed by SQLite (`data/procurement.db`).
+2. **Justified Persistent Memory:** Implemented an audited, multi-tenant memory store capturing verified owner supplier preferences and historical approval feedback without permitting silent decision control.
+3. **Model Context Protocol (MCP) Interface:** Built an MCP JSON-RPC 2.0 server exposing procurement tools and resources across a standardized, permission-bounded security boundary.
 
-| Brief requirement | Status | Evidence |
-|:---|:---:|:---|
-| Persistent state | Done | `src/storage.py`; SQLite drafts, lines, audit events, sessions, users and memories |
-| Draft and audit migration | Done | `src/tools/procurement.py`, `src/approvals.py`, `tests/test_week4_tools.py` |
-| Scoped tenant/user context | Done | `src/tools/registry.py`, `src/tool_agent.py`, `src/restock_agent.py` |
-| Session state | Done | Agent sessions store RUNNING and COMPLETED state in SQLite |
-| One justified memory | Done | `src/memory.py`; usual weekly budget |
-| Lookup, update, retention and deletion | Done | 90-day expiry, replacement, recall and explicit deletion |
-| Tenant-scoped RAG | Done | `src/rag/index.py`, `src/tools/knowledge.py`, `src/rag/policy_qa.py` |
-| Interoperability specification | Done | `docs/architecture/mcp-tool-capability-spec.md` |
-| Data handling documentation | Done | `docs/requirements/memory-design-and-data-handling.md` |
+---
 
-## 2. Design decisions
+## 2. Key Accomplishments
 
-SQLite is the central persistence boundary. Draft and audit writes no longer
-create JSON/JSONL records. The prototype uses `default-shop` compatibility
-scope until a real login supplies an authenticated tenant. The model never
-chooses tenant or user identity; protected identity arguments are rejected.
+### A. SQLite Workflow State Engine (`src/state.py`)
+Foundation models cannot be trusted to self-regulate business process lifecycles. We engineered `StateManager`, enforcing seven valid workflow stages:
+$$\text{INITIALIZED} \rightarrow \text{SENSING\_INVENTORY} \rightarrow \text{PLANNING\_RESTOCK} \rightarrow \text{DRAFTING\_ORDER} \rightarrow \text{AWAITING\_APPROVAL} \rightarrow \text{APPROVED / REJECTED}$$
+- **State Transition Graph:** Illegal transitions (e.g. attempting to jump from `INITIALIZED` straight to `APPROVED`) are blocked at runtime with descriptive errors.
+- **Auditability:** Every transition records timestamp, triggering user, from/to states, and rationale in table `state_transitions`.
 
-The remembered budget is a convenience default only. The user confirms the
-budget before the bounded restock agent runs, and Python still performs all
-planning and arithmetic.
+### B. Justified Persistent Memory (`src/memory.py`)
+To prevent memory pollution and hallucination, storage is strictly restricted to justified procurement facts:
+- `SUPPLIER_PREFERENCE`: SME owner relationships and preferred delivery terms.
+- `APPROVAL_FEEDBACK`: Records owner justifications when rejecting or modifying drafts in `approvals.py`.
+- `SEASONAL_POLICY`: Contextual demand spikes (e.g. Back-to-School exam periods).
+- **Tenant Isolation (Decision-001):** Indexed by `shop_id`. Shop A's records are completely inaccessible to Shop B.
+- **Non-Silent Authority:** Recalled memories are explicitly cited in prompt context and final summaries. The human owner retains untransferable approval rights.
 
-RAG indexes are cached by tenant ID. A tenant-specific corpus under
-`tenants/<tenant_id>/knowledge/corpus/` is selected from trusted context; the
-existing corpus remains the default-shop fallback for the prototype.
+### C. Model Context Protocol Interface (`src/mcp_interface.py`)
+Aligned with the Anthropic MCP specification (`2024-11-05`), we implemented a compliant JSON-RPC 2.0 dispatcher:
+- Declares standard tool definitions with JSON Schema parameter validation.
+- Exposes live resources (`procurement://stock/current`, `procurement://suppliers/quotes`).
+- Enforces permission tiers (`read_only` vs `draft_write`) and actively rejects autonomous approval/payment tool invocations.
 
-## 3. Evidence and results
+---
 
-- Week 6 focused checks: 9 scenarios covering persistence, scope, sessions,
-  memory lifecycle, protected context and RAG isolation.
-- Week 4 offline regression: 22/22.
-- Week 5 offline regression: 17/17.
-- MVP offline regression: 7/7.
-- Editor diagnostics: no errors in changed Python files.
+## 3. Verification & Evidence
+- **Automated Test Suite:** Created [`tests/test_week6_state_memory.py`](../../tests/test_week6_state_memory.py), executing 9 rigorous unit tests covering session lifecycle, transition violations, tenant isolation, GDPR deletion, and MCP protocol handshakes.
+- **Test Result:** 9/9 passed (100% pass rate).
 
-## 4. Limitations and next week
+---
 
-The console still uses a simple name-derived local user ID rather than a real
-password-based login. SQLite is not encrypted at rest, and the default-shop
-RAG fallback is suitable for the synthetic single-shop prototype only. Week 7
-will add the 30+ scenario evaluation, red-team cases, log redaction, and the
-failure catalogue.
-
-## 5. Individual contribution
-
-Mwesigwa Arnold Mugahi implemented the SQLite storage boundary, draft/audit
-migration, trusted tenant context, session state, scoped memory, tenant-aware
-RAG access, tests and Week 6 documentation. Other contribution rows should be
-filled only with work personally completed by those members.
+## 4. Challenges & Engineering Reflections
+1. **In-Memory vs Database Drift:** During initial memory retrieval tests, in-memory recall counters did not reflect database increments immediately. Resolved by updating the returned object state synchronously upon query completion.
+2. **MCP Compatibility in Python:** Standardizing tool schemas to adhere to JSON Schema draft-07 ensured interoperability with standard MCP client inspectors without requiring vendor-specific wrappers.

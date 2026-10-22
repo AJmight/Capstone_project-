@@ -17,7 +17,7 @@ A shop assistant for a small Ugandan stationery shop. It finds low stock, works 
 compares suppliers, answers questions about past purchases and shop policy, and **drafts** purchase
 requisitions. **AI supports, never decides:** a person approves every draft; the AI cannot order or pay.
 
-## 2. Where we are (as of 2026-10-06)
+## 2. Where we are (as of 2026-10-20)
 
 | Week | Topic | Status | Read |
 |:---:|:---|:---|:---|
@@ -26,12 +26,19 @@ requisitions. **AI supports, never decides:** a person approves every draft; the
 | 3 | RAG (policy documents) | ✅ | `docs/notes/rag-explained.md` |
 | 4 | Tools + function calling | ✅ | `docs/requirements/tool-catalogue.md` |
 | 5 | Bounded agent | ✅ | `docs/requirements/agent-task-contract.md` |
-| 6 | Memory, state, interoperability | ⏳ next | brief §7 Week 6 |
-| 7 | 30+ scenario evaluation, guardrails | ⏳ | brief §7 Week 7 |
-| 8 | Release, report, demo (presentations 27/29/30 Oct) | ⏳ | brief §9–10 |
+| 6 | Memory, state, interoperability | ✅ | `docs/architecture/state-and-memory-model.md`, `docs/requirements/mcp-interface-specification.md` |
+| 7 | 30+ scenario evaluation, guardrails | ✅ | `docs/evaluation/week7-evaluation-dataset.md`, `docs/evaluation/failure-catalogue.md` |
+| 8 | Release, report, demo | ✅ code & report · ⏳ deck | `docs/final-report.md`, `evidence/final/` (presentations 27/29/30 Oct, hand-in 23 Oct) |
 
-Test status: offline 22 + 16 + 7 tests and RAG retrieval 10/10 (free to run); live suites all passing
-on prompt v2.4.0. Weekly evidence is in `evidence/`, decisions in `docs/weekly-reports/week*-engineering-trail.md`.
+Test status: **All offline and evaluation suites pass 100%** (105 of 105 in total):
+- Week 4 tools: 22/22 offline
+- Week 5 agent: 17/17 offline
+- MVP console: 7/7 offline
+- RAG retrieval: hit@3 10/10, MRR 0.88
+- Week 6 state & memory: 9/9 unit tests (`tests/test_week6_state_memory.py`)
+- Week 7 evaluations: 31/31 scenarios (`tests/test_week7_evaluations.py`)
+- Week 8 release checks: 19/19 (`tests/test_week8_release_checks.py`)
+Weekly evidence is in `evidence/`, the release evidence pack in `evidence/final/`, architecture in `docs/architecture/`, and decisions in `docs/weekly-reports/week*-engineering-trail.md`.
 
 ## 3. Setup (15 minutes, Windows PowerShell)
 
@@ -56,6 +63,13 @@ py tests\test_week5_agent.py --offline
 py tests\test_mvp_tools.py --offline
 py tests\test_week3_rag.py --offline
 
+# Week 6 & Week 7 suites (state, memory, guardrails & 31 evaluation scenarios)
+py tests\test_week6_state_memory.py
+py tests\test_week7_evaluations.py
+
+# Week 8 release checks (the regressions that must never come back)
+py tests\test_week8_release_checks.py
+
 # The app (uses a few AI calls per question)
 py src\app.py
 ```
@@ -72,38 +86,53 @@ Then open one trace: `evidence\week5\trace_T3_failure_recovery.md` — every ste
 
 ```
 you ──► app.py ──► tool_agent / restock_agent ──► Gemini (decides WHICH tool next)
+                          │             ▲
+                          │             │ (Recalled preferences)
+                          ▼             │
+                     state.py ───► memory.py (SQLite persistent state & justified preferences)
                           │
                           ▼
-                    registry.py  (is this tool on the allow-list? are the arguments valid?)
+                     guardrails.py (Input injection checks, budget ceiling F-12, HITL gate)
                           │
                           ▼
-                 procurement.py / knowledge.py  (Python does ALL the maths and lookups)
+                     registry.py / mcp_interface.py (Is tool on allow-list? Valid args?)
                           │
                           ▼
-            data/*.csv · knowledge/corpus/*.md · data/drafts/*.json  ──► approvals.py (a PERSON decides)
+                 procurement.py / knowledge.py (Python does ALL calculations and lookups)
+                          │
+                          ▼
+       data/*.csv · knowledge/corpus/*.md · data/drafts/*.json ──► approvals.py (a PERSON decides)
 ```
 
 Read in this order (every file has comments on each section):
 1. `docs/notes/agentic-ai-notes.md` — the concepts in plain language (20 min).
 2. `src/tools/procurement.py` — `_reorder_calculation()` is the core business rule.
 3. `src/tools/registry.py` — `execute_tool()`, the gatekeeper.
-4. `src/tool_agent.py` — `run_agent()`, the loop and its limits.
-5. `src/restock_agent.py` — the Week 5 agent; read `run_restock()` top to bottom.
-6. `src/approvals.py` — the human gate.
-7. `docs/notes/rag-explained.md` + `src/rag/` — the RAG part.
+4. `src/state.py` — Week 6: explicit Finite State Machine and SQLite session lifecycle.
+5. `src/memory.py` — Week 6: justified persistent memory and Decision-001 tenant isolation.
+6. `src/mcp_interface.py` — Week 6: Model Context Protocol (MCP) server dispatcher.
+7. `src/guardrails.py` — Week 7: input validation, F-12 budget ceiling fix, and HITL gate.
+8. `src/tool_agent.py` — `run_agent()`, the loop and its limits.
+9. `src/restock_agent.py` — the bounded restock agent; read `run_restock()` top to bottom.
+10. `src/approvals.py` — the human gate.
+11. `docs/notes/rag-explained.md` + `src/rag/` — the RAG part.
 
 ## 6. Who owns what from now (proposal — agree it in our next meeting and put it in ClickUp)
 
-> **Updated 13 Oct:** the detailed cards with checklists and due dates are in `docs/team/task-board.md`
-> (importable CSV: `docs/team/task-board.csv`) and summarised in the README.
+> **Updated 20 Oct (evening):** Weeks 1–8 are implemented and verified, and the release
+> `v1.0.0` is cut. The final report is `docs/final-report.md` and the release evidence
+> pack is `evidence/final/`. **What is left is the presentation**: the slide deck, the
+> demo screenshots, the MUELE upload and the contribution rows in the weekly reports.
+> All of it is tracked in `docs/team/task-board.md`.
 
-| Role | Your tasks (Weeks 6–8) | Review task for work already done (counts as your contribution when recorded) |
+| Role | Your tasks (before hand-in 23 Oct) | Review task for work already done (counts as your contribution when recorded) |
 |:---|:---|:---|
-| **Project/Requirements Lead** | ClickUp board and weekly tasks; weekly reports (fill the `[name]` rows); final report structure (brief §9); presentation plan (brief §10) | Review `project-charter.md` and `user-stories.md`; propose changes; decide with the team whether to attempt story 3 (PDF quotes) |
-| **Application/Integration Lead** | Web UI (Streamlit or Flask) calling the same functions as `src/app.py`; drafts "Pending approval" page (AC 10.1); deployment for the demo | Review `app.py`, `tool_agent.py`; list UI requirements |
-| **Quality/Security Lead** | Week 7: 30+ scenario evaluation set and runner (normal, edge, wrong information, adversarial, tool failure, unauthorised); failure catalogue with re-tests; real login/passwords plan | Run every offline suite, review test docstrings, try to break the agent (prompt injection, role abuse) and log findings |
-| **DevOps/Documentation Lead** | GitHub Actions running the offline tests on every push; tagged release `v1.0`; reproducible run instructions; keep `docs/` tidy | Review README and setup on a clean machine; report every step that fails |
-| **AI Engineering Lead** | Week 6: SQLite state for drafts/audit, one justified memory feature, MCP-style tool interface; support the Quality Lead's evaluation | Explain the system to the team (walk-through session) |
+| | | |
+| **Project/Requirements Lead** | **Build the 8-slide deck** (outline + demo script: `docs/final-report.md` Appendix G); the MUELE upload; fill the contribution rows in `week1..8-report.md` | Review `docs/weekly-reports/week1..8-report.md`; audit the contribution tables |
+| **Application/Integration Lead** | Demo rehearsal (3 times); capture the 5 demo screenshots into `evidence/final/screenshots/`; the offline fallback walkthrough | Review `src/app.py`, `src/mcp_interface.py`; verify the user journey end to end |
+| **Quality/Security Lead** | Re-run all seven offline suites on a clean clone and paste the result into `evidence/final/`; check every figure quoted in the final report against the code | Explain the red-teaming results and the guardrails to the panel |
+| **DevOps/Documentation Lead** | Verify a clean clone on a machine that has never run the project; capture the setup friction; publish the release notes for `v1.0.0` | Review the README setup; confirm the runtime database is not committed |
+| **AI Engineering Lead** | Hand-in review; answer the viva questions in §8; lead the technical explanation in the presentation | Explain the FSM, the justified memory and the bounded agency to the panel |
 
 **How to record review work honestly:** in the weekly report write e.g. "Reviewed `registry.py` and the
 22 offline tests; found X; opened issue #N" — and make a commit or GitHub issue so there is evidence.
@@ -120,13 +149,17 @@ Read in this order (every file has comments on each section):
 ## 8. Can you explain these? (viva practice)
 
 1. Why does the model never calculate quantities? (failure F-04)
-2. What stops the AI from approving, ordering or paying, even if it tries? (allow-list, F-07, O-16)
+2. What stops the AI from approving, ordering or paying, even if it tries? (allow-list, F-07, `HumanInTheLoopGuardrail`)
 3. What are the agent's limits and what happens when one is hit?
 4. How does the restock agent decide which items fit the budget, and who decides the rest?
 5. What happens in trace T3, step by step?
 6. What is RAG, and why does an unanswerable question get "not in the provided documents"?
 7. Where is the human in the loop, and what is recorded when they decide?
 8. Name two real failures we found and how we fixed them.
+9. **Why did we build an explicit Finite State Machine (`src/state.py`) in SQLite instead of relying on the LLM's conversation history?** (LLMs are stateless and can hallucinate progress; FSM enforces deterministic ordering).
+10. **What is justified memory (`src/memory.py`), and how do we prevent Shop A from accessing Shop B's records?** (Restricted to supplier preferences and feedback; isolated by `shop_id` partition key).
+11. **What is the Model Context Protocol (MCP) and how does our server enforce security boundaries?** (JSON-RPC standard decoupling tools from models; server blocks unauthorized action attempts).
+12. **How did we solve Failure Mode F-12 (budget ceiling overrun)?** (`BudgetCeilingGuardrail` makes the exact draft total a hard ceiling against the allocated budget, the agent reports a breach as `BUDGET_CEILING_EXCEEDED`, and the approval gate refuses a silent approval while the ±10% estimate band still reaches above the budget).
 
 ## 9. Help
 

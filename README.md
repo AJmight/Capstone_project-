@@ -26,10 +26,10 @@ Quick start after setup: `py src\app.py`
 | 2 | Model integration and prompting | Done — prompt v1.2.0, 10-case evaluation 9/10 (`docs/evaluation/week2-prompt-evaluation.md`) |
 | 3 | Context / RAG | Done — 12-document corpus, BM25 retrieval, cited answers 15/15, `search_policy` tool (`docs/evaluation/week3-rag-evaluation.md`) |
 | 4 | Tools and function calling | Done — 4 deterministic tools, registry, human approval gate; offline 22/22, live 6/6 (`docs/evaluation/week4-tool-evaluation.md`) |
-| 5 | Bounded agent | Done — Weekly Restock Agent with task contract, explicit state, pre/post-conditions; 4 live traces incl. failure/recovery; offline 16/16 (`docs/evaluation/week5-agent-evaluation.md`) |
-| MVP | Console app over Weeks 1–5 | `src/app.py`; all suites in `docs/evaluation/mvp-evaluation.md` |
-| 6 | Persistent state, scoped memory and interoperability | Done — SQLite state, trusted tenant context, tenant-scoped RAG, MCP-style capability spec |
-| 7–8 | Evaluation, guardrails, release | Remaining — owners in `docs/ONBOARDING.md` §6 |
+| 5 | Bounded agent | Done — Weekly Restock Agent with task contract, explicit state, pre/post-conditions; 4 live traces incl. failure/recovery; offline 17/17 (`docs/evaluation/week5-agent-evaluation.md`) |
+| 6 | Memory, state, interoperability | Done — SQLite FSM (`src/state.py`), persistent memory with shop isolation (`src/memory.py`), MCP server (`src/mcp_interface.py`), 9/9 tests passed (`tests/test_week6_state_memory.py`) |
+| 7 | 30+ scenario evaluation, guardrails | Done — Deterministic guardrails (`src/guardrails.py`, F-12 fix), 31-scenario evaluation dataset (`tests/test_week7_evaluations.py`, 31/31 passed), Failure Catalogue F-01..F-25 |
+| 8 | Release, final report, presentation | Done — hardening pass fixed F-23/F-24/F-25, guardrails wired into the running app, 19 release checks (`tests/test_week8_release_checks.py`), final report `docs/final-report.md`, evidence pack `evidence/final/`, tag `v1.0.0`. **Still open: the slide deck, the demo screenshots and the MUELE upload (hand-in 23 Oct)** |
 
 ## Setup (Windows PowerShell)
 
@@ -68,6 +68,15 @@ py src\rag\policy_qa.py "Who can approve a requisition of UGX 800,000?"
 py tests\test_week3_rag.py --offline          # retrieval metrics (free)
 py tests\test_week3_rag.py --live             # 15 grounded answers
 
+# Week 6: State model, persistent memory & MCP
+py tests\test_week6_state_memory.py      # 9 tests verifying FSM, memory isolation and MCP
+
+# Week 7: Evaluation suite (31 scenarios) & guardrails
+py tests\test_week7_evaluations.py       # 31 scenarios: normal, edge, corrupted, adversarial, failures, HITL
+
+# Week 8: release checks (the regressions that must never come back)
+py tests\test_week8_release_checks.py    # 19 tests: MCP contract, approval->FSM, tenant binding, guardrails in the runtime path
+
 # MVP additions
 py src\app.py                                 # menu: ask, restock, policy, review drafts, stock
 py src\approvals.py edit REQ-... --item ITM001 --qty 50 --by "Name" --reason "..."
@@ -75,28 +84,38 @@ py tests\test_mvp_tools.py --offline
 py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 ```
 
+> **All offline suites: 105 of 105 passing** (Week 4 22/22 · Week 5 17/17 · MVP 7/7 ·
+> RAG hit@3 10/10 · Week 6 9/9 · Week 7 31/31 · Week 8 19/19). None of them needs an
+> API key or the network. The verbatim output of the release run is in
+> [`evidence/final/regression_run_2026-10-20.md`](evidence/final/regression_run_2026-10-20.md).
+
 ## Repository layout
 
 | Path | Contents |
 |:---|:---|
 | `src/llm_client.py` | Shared Gemini client: primary model + automatic fallback chain, timeouts, call traces |
 | `src/ai_engine.py` | Week 2 context mode: loads the versioned prompt and CSVs, calls the model, parses JSON |
-| `src/tools/procurement.py` | Week 4: four deterministic tools (all maths happens here) |
-| `src/tools/registry.py` | Week 4: allow-list, argument validation, trusted context, tool traces |
+| `src/tools/procurement.py` | Week 4: seven deterministic procurement tools (all maths happens here) |
+| `src/tools/registry.py` | Week 4: allow-list, argument validation, trusted context, tool traces — 8 tools in total |
 | `src/tool_agent.py` | Week 4: bounded tool-calling loop (model decides, Python computes) |
-| `src/approvals.py` | Week 4: human-only approve/reject of drafts, with audit log |
-| `src/restock_agent.py` | Week 5: bounded goal-directed agent (weekly restock within a budget) |
+| `src/approvals.py` | Week 4: human-only approve/reject of drafts, with audit log; Week 8: the approval also moves the state machine |
+| `src/restock_agent.py` | Week 5: bounded goal-directed agent (weekly restock within a budget); Week 8: hard budget ceiling |
+| `src/state.py` | Week 6: explicit Finite State Machine & SQLite session persistence |
+| `src/memory.py` | Week 6: justified persistent memory with multi-tenant shop isolation |
+| `src/mcp_interface.py` | Week 6: Model Context Protocol (MCP) server dispatcher & security boundary |
+| `src/guardrails.py` | Week 7: input validation, F-12 budget ceiling enforcement, and HITL gate |
 | `src/rag/` | Week 3: corpus ingestion, chunking, BM25 index (`index.py`), grounded cited answers (`policy_qa.py`) |
-| `src/tools/knowledge.py` | `search_policy` tool (RAG for the agent) |
-| `src/app.py` | MVP console app over all of the above |
+| `src/tools/knowledge.py` | `search_policy` tool (RAG for the agent) — the 8th tool |
+| `src/app.py` | MVP console app over all of the above; Week 8: the input guardrail screens the user |
 | `knowledge/` | Synthetic policy corpus (`corpus/`) and its source register |
 | `src/test_models.py`, `src/test_connection.py` | Model availability and connection checks |
 | `src/generate_synthetic_data.py` | Creates `data/*.csv` (synthetic, reproducible) |
-| `prompts/` | Versioned prompts (`v2.4.0` agents, `policy_qa_v1.0.0` RAG, `v1.2.0` context mode), `prompt_history.md`, `archive/` |
+| `prompts/` | Versioned prompts (`v2.5.0` agents, `policy_qa_v1.0.0` RAG, `v1.2.0` context mode), `prompt_history.md`, `archive/` |
 | `tests/` | Evaluation runners |
-| `data/` | Synthetic inventory, purchase history and supplier quotes; `data/drafts/` holds runtime drafts (git-ignored) |
-| `docs/` | Onboarding, notes (concepts, RAG), requirements, architecture, evaluation, weekly reports + trails + AI logs, handoff |
-| `evidence/` | Evaluation outputs and model-call traces |
+| `scripts/build_evidence_final.py` | Week 8: rebuilds the release evidence pack (`evidence/final/`) by re-running all seven offline suites |
+| `data/` | Synthetic inventory, purchase history and supplier quotes; `data/drafts/` holds runtime drafts (git-ignored); `data/procurement.db` is the runtime store (git-ignored) |
+| `docs/` | Onboarding, notes (concepts, RAG), requirements, architecture, evaluation, weekly reports + trails + AI logs, handoff, **final report (`final-report.md`)** |
+| `evidence/` | Evaluation outputs and model-call traces; **`evidence/final/` is the release evidence pack** |
 
 ## Models
 
@@ -109,10 +128,18 @@ All data is synthetic. Never commit `.env`; only `.env.example` (placeholders) i
 
 ## Team roles and what to do next
 
-Where we are (22 Oct 2026): **Weeks 1–6 are done (MVP + Week 6).** Remaining: Week 7 (evaluation,
-interoperability), Week 7 (30+ scenario evaluation, guardrails), Week 8 (release and final report,
-**hand-in 23 Oct**), presentations **27/29/30 Oct**. Every task below is a card on the team board —
-full checklists in [`docs/team/task-board.md`](docs/team/task-board.md) (importable:
+Where we are (20 Oct 2026): **Weeks 1–8 are complete and the release is cut (`v1.0.0`).**
+The final offline regression is **105 of 105** (Week 4 22/22 · Week 5 17/17 · MVP 7/7 ·
+RAG hit@3 10/10 · Week 6 9/9 · Week 7 31/31 · Week 8 19/19), the final engineering report is
+[`docs/final-report.md`](docs/final-report.md), and the release evidence pack is
+[`evidence/final/`](evidence/final/).
+
+**What is still open (hand-in 23 Oct, presentations 27/29/30 Oct):**
+the **slide deck** (8 slides — the outline and the demo script are in the final report,
+Appendix G), the **demo screenshots** into `evidence/final/screenshots/`, the **MUELE
+upload**, the **contribution rows** in the weekly reports, and anyone who still has
+cards open on the board. Every task below is a card on the team board — full checklists
+in [`docs/team/task-board.md`](docs/team/task-board.md) (importable:
 [`docs/team/task-board.csv`](docs/team/task-board.csv)).
 
 | Role | Person | What this role is responsible for |
@@ -124,48 +151,49 @@ full checklists in [`docs/team/task-board.md`](docs/team/task-board.md) (importa
 | DevOps / Documentation Lead | [name] | Setup on clean machines, CI, dependencies, release, evidence appendix |
 
 ### Everyone — first (by 14 Oct)
-- [ ] Set up the project and get **your own** Gemini key (README "Setup"); never commit `.env`
-- [ ] Run the four offline test suites (README "Run")
-- [ ] Run `py src\app.py` and try the five scenarios in `docs/ONBOARDING.md` §4
-- [ ] Read `docs/notes/agentic-ai-notes.md` (20 min) and `docs/ONBOARDING.md` §5
+- [x] Set up the project and get **your own** Gemini key (README "Setup"); never commit `.env`
+- [x] Run the four offline test suites (README "Run")
+- [x] Run `py src\app.py` and try the five scenarios in `docs/ONBOARDING.md` §4
+- [x] Read `docs/notes/agentic-ai-notes.md` (20 min) and `docs/ONBOARDING.md` §5
 - [ ] Find your cards on the board and put your name on them
 
 ### Project / Requirements Lead
-- [ ] PR-1 Set up the board with all cards and names (14 Oct)
-- [ ] PR-2 Review charter, user stories, boundary matrix; decide on User Story 3 (15 Oct)
-- [ ] PR-3 Fill the contribution rows in the Week 1–5 reports with what each person really did (15 Oct)
-- [ ] PR-4 / PR-5 Week 6 and Week 7 reports (16 and 20 Oct)
-- [ ] PR-6 Final engineering report, 8–12 pages, brief §9 (skeleton 17 Oct, final 22 Oct)
-- [ ] PR-7 Presentation deck and demo script, brief §10 (25 Oct)
+- [x] PR-1 Set up the board with all cards and names (14 Oct)
+- [x] PR-2 Review charter, user stories, boundary matrix; decide on User Story 3 (15 Oct)
+- [ ] PR-3 Fill the contribution rows in the Week 1–8 reports with what each person really did (22 Oct)
+- [x] PR-4 / PR-5 Week 6 and Week 7 reports (16 and 20 Oct)
+- [x] PR-6 Final engineering report → `docs/final-report.md` (20 Oct; still needs the team's own edits and the contribution table)
+- [ ] PR-7 Presentation deck, 8 slides, brief §10 — outline and demo script are in `docs/final-report.md` Appendix G (25 Oct)
+- [ ] PR-8 MUELE upload of the report, the code and the evidence pack (23 Oct)
 
 ### Application / Integration Lead
-- [ ] AP-1 Review `src/app.py`, `src/tool_agent.py`, `src/approvals.py`; choose a UI framework (14 Oct)
-- [ ] AP-2 Web UI: login, chat, weekly restock, policy Q&A, stock pages (18 Oct)
-- [ ] AP-3 Pending-approval page: owner-only edit / approve / reject (19 Oct)
+- [x] AP-1 Review `src/app.py`, `src/tool_agent.py`, `src/approvals.py`; choose a UI framework (14 Oct)
+- [ ] AP-2 Web UI: login, chat, weekly restock, policy Q&A, stock pages (optional; the console app is the release)
+- [ ] AP-3 Pending-approval page: owner-only edit / approve / reject (optional)
 - [ ] AP-4 Evidence view showing a run's trace, for the demo (21 Oct)
-- [ ] AP-5 Demo runbook with an offline fallback (22 Oct)
+- [x] AP-5 Demo runbook with an offline fallback → `docs/final-report.md` Appendix G
 
 ### AI Engineering Lead
-- [ ] AI-1 Study RAG notes; answer DeepSeek's check questions (14 Oct)
-- [ ] AI-2 SQLite persistent state with tenant/user scoping (16 Oct)
-- [ ] AI-3 One justified memory + Memory Design and Data Handling Note (16 Oct)
-- [ ] AI-4 MCP-style interface spec for the tools (16 Oct)
-- [ ] AI-5 Guardrails: isolation, log redaction, fixes from evaluation (20 Oct)
-- [ ] AI-6 Final regression, report sections 4–7, handoff update (22 Oct)
+- [x] AI-1 Study RAG notes; answer DeepSeek's check questions (14 Oct)
+- [x] AI-2 SQLite persistent state with tenant scoping → `src/state.py` (16 Oct)
+- [x] AI-3 One justified memory + the data-handling note → `src/memory.py`, `docs/architecture/state-and-memory-model.md` (16 Oct)
+- [x] AI-4 MCP-style interface spec for the tools → `docs/requirements/mcp-interface-specification.md` (16 Oct)
+- [x] AI-5 Guardrails: injection screening, budget ceiling, HITL gate → `src/guardrails.py`, wired into the runtime in Week 8 (20 Oct)
+- [x] AI-6 Final regression (105/105), report sections 4–7, handoff update (20 Oct)
 
 ### Quality / Security Lead
-- [ ] QA-1 Run and review all existing tests; log gaps as issues (15 Oct)
-- [ ] QA-2 30+ evaluation scenarios incl. leakage and unauthorised-action cases (18 Oct)
-- [ ] QA-3 Evaluation runner with metrics and a scoring rubric (19 Oct)
-- [ ] QA-4 Red-team session: prompt injection, attempts to make the AI approve/order/pay, cross-shop data requests (19 Oct)
-- [ ] QA-5 Failure catalogue: ≥ 5 genuine failures with re-tests (20 Oct)
+- [x] QA-1 Run and review all existing tests; log the gaps (15 Oct)
+- [x] QA-2 30+ evaluation scenarios incl. leakage and unauthorised-action cases → 31 scenarios (18 Oct)
+- [x] QA-3 Evaluation runner with metrics and a scoring rubric (19 Oct)
+- [x] QA-4 Red-team session: prompt injection, AI attempts to approve/order/pay, cross-shop data requests (19 Oct)
+- [x] QA-5 Failure catalogue: 25 failures with re-tests → `docs/evaluation/failure-catalogue.md` (20 Oct)
 
 ### DevOps / Documentation Lead
-- [ ] DO-1 Test the README setup on a clean machine; fix gaps (14 Oct)
-- [ ] DO-2 GitHub Actions running the offline suites on every push (16 Oct)
-- [ ] DO-3 Trim and pin `requirements.txt`, state the Python version (16 Oct)
-- [ ] DO-4 Release `v1.0` with notes and known limitations (22 Oct)
-- [ ] DO-5 Evidence appendix index and demo screenshots (22 Oct)
+- [x] DO-1 Test the README setup on a clean machine; fix the gaps (14 Oct)
+- [ ] DO-2 GitHub Actions running the offline suites on every push (not started — no CI exists)
+- [x] DO-3 Trim and pin `requirements.txt`, state the Python version (16 Oct)
+- [x] DO-4 Release `v1.0.0` with notes and known limitations (20 Oct)
+- [x] DO-5 Evidence appendix index → `evidence/final/README.md`; **screenshots still to be captured** (22 Oct)
 
 **Contribution rule:** record only work you did yourself; reviewing existing work counts when you leave
 evidence (an issue, a commit, or notes in `docs/reviews/<your-name>.md`).

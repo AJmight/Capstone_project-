@@ -29,7 +29,7 @@ Rules enforced:
   - only a draft whose status is "DRAFT - AWAITING HUMAN APPROVAL" can be decided (no double decisions)
   - rejecting needs a reason (User Story 10, AC 10.3)
   - approving a draft with a line over the 200% cap needs an override reason (User Story 12)
-    - every decision is appended to SQLite's audit_events table (User Story 11, AC 11.3)
+  - every decision is appended to data/drafts/audit_log.jsonl (User Story 11, AC 11.3)
 
 Approving here does NOT order or pay anything: it only records the human decision.
 Placing the order with the supplier stays a manual, offline step.
@@ -47,14 +47,15 @@ Version: 1.1.0 (MVP: edit quantities before approval, User Story 9)
 # Imports
 # ---------------------------------------------------------------------------
 import argparse                               # command-line arguments (list/show/approve/reject)
-import json                                   # render draft records and CLI output
+import json                                   # drafts and the audit log are JSON
 from datetime import datetime, timezone       # decision timestamps
 from pathlib import Path                      # file paths
 
+from guardrails import (BudgetCeilingGuardrail, GuardrailViolation,   # Week 7 guardrails
+                        HumanInTheLoopGuardrail)
 from tools import procurement                 # reuse DRAFTS_DIR and DRAFT_STATUS so they never drift apart
-from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 
-AUDIT_LOG_NAME = "SQLite audit_events table"
+AUDIT_LOG_NAME = "audit_log.jsonl"
 
 
 class ApprovalError(Exception):
@@ -69,48 +70,56 @@ def _drafts_dir() -> Path:
     return procurement.DRAFTS_DIR
 
 
-def _storage() -> SQLiteStorage:
-    """Use the central database for the current single-shop application context."""
-    return SQLiteStorage(procurement.STORAGE_PATH)
+def load_draft(draft_id: str) -> dict:
+    """Read data/drafts/<draft_id>.json, or raise ApprovalError if it does not exist."""
+    path = _drafts_dir() / f"{draft_id}.json"
+    if not path.exists():
+        raise ApprovalError(f"No draft named {draft_id} in {_drafts_dir()}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_draft(draft_id: str, tenant_id: str = DEFAULT_TENANT_ID,
-               user_id: str = DEFAULT_USER_ID) -> dict:
-    """Read one draft from SQLite, or raise ApprovalError if it does not exist."""
-    draft = _storage().load_draft(draft_id, tenant_id, user_id)
-    if draft is None:
-        raise ApprovalError(f"No draft named {draft_id} in SQLite storage")
-    return draft
-
-
-def list_drafts(tenant_id: str = DEFAULT_TENANT_ID,
-                user_id: str = DEFAULT_USER_ID) -> list[dict]:
-    """All SQLite drafts, newest first, as short summaries."""
-    storage = _storage()
-    summaries = storage.list_drafts(tenant_id, user_id)
-    for summary in summaries:
-        draft = storage.load_draft(summary["draft_id"], tenant_id, user_id)
-        summary["lines"] = len(draft["lines"]) if draft else 0
-    return summaries
+def list_drafts() -> list[dict]:
+    """All drafts, newest first, as short summaries."""
+    folder = _drafts_dir()
+    if not folder.exists():
+        return []
+    drafts = [json.loads(p.read_text(encoding="utf-8")) for p in folder.glob("REQ-*.json")]
+    drafts.sort(key=lambda d: d["created_at"], reverse=True)
+    return [{"draft_id": d["draft_id"], "created_at": d["created_at"], "created_by": d["created_by"],
+             "status": d["status"], "lines": len(d["lines"]),
+             "estimated_budget_ugx": d["estimated_budget_ugx"],
+             "requires_override_any": d.get("requires_override_any", False)} for d in drafts]
 
 
 # ---------------------------------------------------------------------------
 # The decision itself
 # ---------------------------------------------------------------------------
 def decide(draft_id: str, decision: str, decided_by: str, reason: str = "",
-           tenant_id: str = DEFAULT_TENANT_ID, user_id: str = DEFAULT_USER_ID) -> dict:
+           actor_role: str = "HUMAN_OWNER") -> dict:
     """
     Record a human decision on a draft. decision is "APPROVED" or "REJECTED".
 
     Returns the updated draft. Raises ApprovalError if a rule is broken.
     This function is called by the command line below (and by tests), never by the AI.
+
+    Week 8 hardening (Failure Modes F-19, F-24 and the F-12 closure):
+      - actor_role is checked against the human-only guardrail, so the function
+        itself refuses to record a decision for an AI actor;
+      - the allocated budget of the originating session is a HARD ceiling: a
+        draft that is over budget cannot be approved (F-12);
+      - the decision also advances the Week 6 state machine, so the session
+        moves AWAITING_APPROVAL -> APPROVED / REJECTED and the audit trail
+        records the human's signature (F-24).
     """
+    # --- the human-only boundary, checked before anything is written ---
+    HumanInTheLoopGuardrail.verify_action_permitted("approve_requisition", actor_role)
+
     if decision not in ("APPROVED", "REJECTED"):
         raise ApprovalError("decision must be APPROVED or REJECTED")
     if not decided_by.strip():
         raise ApprovalError("the approver's name is required (--by)")
 
-    draft = load_draft(draft_id, tenant_id, user_id)
+    draft = load_draft(draft_id)
     if draft["status"] != procurement.DRAFT_STATUS:
         raise ApprovalError(f"{draft_id} is already {draft['status']}; decisions cannot be changed")
     if decision == "REJECTED" and not reason.strip():
@@ -119,25 +128,100 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "",
         raise ApprovalError("this draft has a line above the 200% safety cap; "
                             "an override reason is required to approve it (US 12)")
 
+    # --- F-12: the allocated budget is a hard ceiling, not a range ---
+    # The session is the link between the draft file and the Week 6 state
+    # machine (it stores the draft_id and the budget the owner allocated).
+    state_mgr, session = None, None
+    try:
+        from state import StateManager            # Week 6 state machine (imported lazily)
+        state_mgr = StateManager()
+        session = state_mgr.find_session_by_draft_id(draft_id)
+    except Exception:
+        state_mgr, session = None, None
+    if session is not None and decision == "APPROVED":
+        try:
+            BudgetCeilingGuardrail.verify_draft_within_budget(
+                draft_total_ugx=int(draft.get("estimated_budget_ugx", 0)),
+                allocated_budget_ugx=int(session.budget_ugx),
+            )
+        except GuardrailViolation as exc:
+            raise ApprovalError(
+                f"{exc} Edit the quantity first (py src\\approvals.py edit {draft_id} "
+                f"--item ITMxxx --qty N --by \"Name\" --reason \"...\")."
+            ) from exc
+        # F-12, second half: the draft also carries an ADVISORY estimate band
+        # (User Story 8, about +/-10%). That band may reach above the money the
+        # owner allocated even when the exact total fits. The approver must see
+        # it and say so, so a band above the budget needs an explicit reason.
+        band_high = int((draft.get("budget_range_ugx") or {}).get("high", 0))
+        if band_high > int(session.budget_ugx) and not reason.strip():
+            raise ApprovalError(
+                f"the estimate band reaches UGX {band_high:,}, above the allocated budget "
+                f"UGX {int(session.budget_ugx):,}. Approve with a --reason that says the extra "
+                f"headroom is accepted, or edit a quantity first."
+            )
+
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     draft["status"] = decision
     draft["decision"] = {"decision": decision, "decided_by": decided_by, "decided_at": now,
                          "reason": reason}
-    storage = _storage()
-    storage.update_draft(draft, tenant_id, user_id)
-    storage.append_audit({"timestamp": now, "draft_id": draft_id, "decision": decision,
-                          "event_type": decision, "decided_by": decided_by, "reason": reason,
-                          "estimated_budget_ugx": draft["estimated_budget_ugx"]},
-                         tenant_id, user_id, draft_id)
+    path = _drafts_dir() / f"{draft_id}.json"
+    path.write_text(json.dumps(draft, indent=2), encoding="utf-8")          # update the draft
+
+    with (_drafts_dir() / AUDIT_LOG_NAME).open("a", encoding="utf-8") as f:  # audit trail
+        f.write(json.dumps({"timestamp": now, "draft_id": draft_id, "decision": decision,
+                            "decided_by": decided_by, "reason": reason,
+                            "estimated_budget_ugx": draft["estimated_budget_ugx"],
+                            "estimate_band_high_ugx": (draft.get("budget_range_ugx") or {}).get("high"),
+                            "allocated_budget_ugx": (session.budget_ugx if session else None),
+                            "session_id": (session.session_id if session else None)}) + "\n")
+
+    # Record feedback into persistent SQLite memory (Week 6 justified memory use case)
+    try:
+        from memory import MemoryManager, MemoryType
+        mem_mgr = MemoryManager()
+        mem_mgr.store_memory(
+            shop_id=draft.get("shop_id", "default_shop"),
+            memory_type=MemoryType.APPROVAL_FEEDBACK,
+            target_key=draft_id,
+            summary=f"Owner {decision} {draft_id}: {reason or 'Approved as suggested'}",
+            details=(f"Requisition total: UGX {draft.get('estimated_budget_ugx', 0):,}. "
+                     f"Decided by {decided_by}. Reason: {reason or 'No override required'}."),
+            source_session_id=draft.get("session_id"),
+            created_by=decided_by
+        )
+    except Exception:
+        pass
+
+    # --- F-24: the human decision also advances the Week 6 workflow state ---
+    if state_mgr is not None and session is not None:
+        try:
+            from state import WorkflowStage
+            target = (WorkflowStage.APPROVED if decision == "APPROVED"
+                      else WorkflowStage.REJECTED)
+            state_mgr.update_session(session.session_id, approval_status=decision)
+            state_mgr.transition_to(
+                session.session_id, target,
+                reason=f"Human decision by {decided_by}",
+                metadata={"draft_id": draft_id, "decided_by": decided_by, "reason": reason},
+            )
+        except Exception:
+            # The decision is already recorded on the draft and in the audit log;
+            # a state-machine problem must not lose the human's decision.
+            pass
+        finally:
+            try:
+                state_mgr.close()
+            except Exception:
+                pass
+
     return draft
 
 
 # ---------------------------------------------------------------------------
 # Editing a quantity before the decision (User Story 9)
 # ---------------------------------------------------------------------------
-def edit_quantity(draft_id: str, item_id: str, new_qty: int, edited_by: str, reason: str,
-                  tenant_id: str = DEFAULT_TENANT_ID,
-                  user_id: str = DEFAULT_USER_ID) -> dict:
+def edit_quantity(draft_id: str, item_id: str, new_qty: int, edited_by: str, reason: str) -> dict:
     """
     Change the quantity of one line in a draft that is still awaiting approval.
 
@@ -150,7 +234,7 @@ def edit_quantity(draft_id: str, item_id: str, new_qty: int, edited_by: str, rea
     if not edited_by.strip() or not reason.strip():
         raise ApprovalError("both --by and --reason are required to change a quantity (AC 9.2)")
 
-    draft = load_draft(draft_id, tenant_id, user_id)
+    draft = load_draft(draft_id)
     if draft["status"] != procurement.DRAFT_STATUS:
         raise ApprovalError(f"{draft_id} is already {draft['status']}; it can no longer be edited")
     line = next((l for l in draft["lines"] if l["item_id"].upper() == item_id.upper()), None)
@@ -177,14 +261,12 @@ def edit_quantity(draft_id: str, item_id: str, new_qty: int, edited_by: str, rea
     if draft.get("agent_checks"):
         draft["agent_checks"]["note"] = "draft edited by a human after the agent's checks"
 
-    storage = _storage()
-    storage.update_draft(draft, tenant_id, user_id)
-    storage.append_audit({"timestamp": now, "draft_id": draft_id, "decision": "EDITED",
-                          "event_type": "EDITED", "item_id": line["item_id"],
-                          "from": old_qty, "to": new_qty,
-                          "ai_suggested_qty": line["ai_suggested_qty"], "decided_by": edited_by,
-                          "reason": reason, "estimated_budget_ugx": total},
-                         tenant_id, user_id, draft_id)
+    (_drafts_dir() / f"{draft_id}.json").write_text(json.dumps(draft, indent=2), encoding="utf-8")
+    with (_drafts_dir() / AUDIT_LOG_NAME).open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"timestamp": now, "draft_id": draft_id, "decision": "EDITED",
+                            "item_id": line["item_id"], "from": old_qty, "to": new_qty,
+                            "ai_suggested_qty": line["ai_suggested_qty"], "decided_by": edited_by,
+                            "reason": reason, "estimated_budget_ugx": total}) + "\n")
     return draft
 
 
