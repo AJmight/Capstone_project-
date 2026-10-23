@@ -1,0 +1,114 @@
+F-26 regression: all offline suites on branch fix-draft-storage AFTER the fix (2026-10-23T22:10:08+03:00), base main @ 2d9644b
+===== py tests/test_week4_tools.py --offline
+======================================================================
+OFFLINE TOOL TESTS (no model calls)
+======================================================================
+[O-01] PASS  get_low_stock returns exactly the items with stock <= reorder point.
+[O-02] PASS  estimate_reorder_quantity matches the independent formula for every low item (F-04).
+[O-03] PASS  The three quantities gemini-3.5-flash-lite got wrong in Week 2 are now exact.
+[O-04] PASS  A4 Exercise Books (stock 45 > 10) is never recommended (Week 2 TC-06 problem).
+[O-05] PASS  Items without purchase history get 0 and a human-must-decide basis (no invented default).
+[O-06] PASS  compare_supplier_quotes lists quotes cheapest first.
+[O-07] PASS  Items can be named the way users talk ('bic pens (blue)', 'calculator').
+[O-08] PASS  'pens' matches two items -> AMBIGUOUS_ITEM; 'ITM999' -> UNKNOWN_ITEM. No guessing.
+[O-09] PASS  draft_requisition computes lines, totals, +/-10% range and saves a DRAFT record.
+[O-10] PASS  Well-stocked items are skipped with a reason; only low items get lines.
+[O-11] PASS  If no requested item is low, no draft file is written.
+[O-12] PASS  MOQ can push a quantity over 200% of the largest past purchase -> requires_override.
+[O-13] PASS  A missing CSV gives INVALID_DATA, not a crash (simulated unavailable service).
+[O-14] PASS  A CSV without reorder_point, or with a non-number, gives INVALID_DATA naming the problem.
+[O-15] PASS  Asking for a tool that is not on the allow-list (e.g. approve_requisition) is blocked.
+[O-16] PASS  The agent is offered every tool, and none of them can approve, order, pay or contact anyone.
+    (Replaces the old viewer-role test: user roles were removed on 2026-10-13 - single trusted user.)
+[O-17] PASS  Missing, extra, wrong-type and empty arguments are rejected before the tool runs.
+[O-18] PASS  created_by comes from the session; the model trying to set it is rejected.
+[O-19] PASS  A crashing tool -> TOOL_ERROR; a tool returning a non-dict -> UNEXPECTED_RESPONSE.
+[O-20] PASS  Allowed and blocked calls are both written to the tool trace.
+[O-21] PASS  Humans approve/reject in approvals.py: reasons required, no double decisions, audit log.
+[O-22] PASS  Approving a draft with a line over the 200% cap requires a reason (US 12).
+
+Offline: 22/22 passed
+===== py tests/test_week5_agent.py --offline
+======================================================================
+OFFLINE AGENT TESTS (scripted fake model, no quota)
+======================================================================
+[A-01] PASS  Ideal model, UGX 300,000: plan -> draft of exactly the 4 included items (UGX 294,130).
+[A-02] PASS  Deferred items, needs-human items and the approval step are listed for the human.
+[A-03] PASS  plan_within_budget fails once (injected) -> retried once -> recovery recorded -> DRAFT_READY.
+[A-04] PASS  Fails twice: the second retry is blocked by the repeat guard; no draft is made.
+[A-05] PASS  UGX 10,000: nothing fits -> no draft -> NOTHING_FITS_BUDGET.
+[A-06] PASS  A model that drafts items outside the plan is caught: POSTCONDITION_FAILED, flagged on the draft.
+[A-07] PASS  Two drafts in one run break 'at most one draft' -> POSTCONDITION_FAILED.
+[A-08] PASS  A model repeating the same call is blocked (REPEATED_CALL) and stopped by the turn limit.
+[A-09] PASS  compare_supplier_quotes is a real tool but not in this task's contract -> blocked.
+[A-10] PASS  Every model 503 -> HANDOFF_MODEL_UNAVAILABLE with a clear message; no draft.
+[A-11] PASS  If the summary omits 'AWAITING HUMAN APPROVAL', the run is not reported as ready.
+[A-12] PASS  A bad budget (0, negative, not a whole number) stops before any model call (fake would crash if called).
+    (The old viewer-role precondition was removed with user roles on 2026-10-13.)
+[A-13] PASS  If nothing is low, SENSE stops the run (NOTHING_TO_DO) without spending model quota.
+[A-14] PASS  plan_within_budget: urgency order, skip-and-continue, needs_human, budget validation.
+[A-15] PASS  The Markdown trace has the phases a marker looks for.
+[A-16] PASS  F-13: the model writes a fake 'awaiting approval' summary without drafting -> code corrects and flags it.
+[A-17] PASS  A model asking for many different tool calls is cut off at MAX_TOOL_CALLS (LIMIT) -> HANDOFF.
+
+Offline: 17/17 passed
+===== py tests/test_mvp_tools.py --offline
+======================================================================
+OFFLINE MVP TESTS
+======================================================================
+[M-O01] PASS  get_inventory('office') returns only Office items, with is_low flags; no category = all 15.
+[M-O02] PASS  An unknown category (the old 'dairy' story) gives UNKNOWN_CATEGORY listing real categories.
+[M-O03] PASS  query_purchase_history totals match an independent recomputation (March-May 2025, Bic Pens).
+[M-O04] PASS  No data for Nov 2024 -> note + data_range; bad month and reversed range -> INVALID_PARAMETER.
+[M-O05] PASS  search_policy via the registry returns source IDs; bad top_k rejected.
+[M-O06] PASS  US 9: editing a line keeps the AI suggestion, recomputes totals, and is audited.
+[M-O07] PASS  Edit needs a reason, only on undecided drafts, only existing lines; >cap sets requires_override.
+
+Offline: 7/7 passed
+===== py tests/test_week3_rag.py --offline
+======================================================================
+OFFLINE RETRIEVAL EVALUATION (index v1.1.0, 61 chunks)
+======================================================================
+[RA-01] HIT  rank=1   ctx=True  top: POL-01#approval-thresholds (6.88), FAQ-01#can-the-ai-assistant-approve-an-order-if-the-owner-is-away (6.04), P
+[RA-02] HIT  rank=1   ctx=True  top: SUP-02#ordering-and-minimum-order (12.73), SUP-03#ordering-and-minimum-order (8.46), FAQ-01#which-supplier-do-
+[RA-03] HIT  rank=1   ctx=True  top: FAQ-01#how-long-do-we-keep-requisition-records (17.69), POL-01#records (4.44), PRC-03#record-backups (3.08)
+[RA-04] HIT  rank=1   ctx=True  top: POL-02#who-pays-suppliers (8.69), POL-02#payment-methods (6.13), GDE-02#what-the-assistant-cannot-do (6.13)
+[RA-05] HIT  rank=3   ctx=True  top: GDE-01#the-problem (16.43), SUP-01#ordering-and-minimum-order (3.17), GDE-01#what-staff-should-do (2.7)
+[RP-01] HIT  rank=1   ctx=True  top: SUP-03#delivery (13.5), SUP-03#payment-terms (11.65), SUP-01#delivery (11.19)
+[RP-02] HIT  rank=1   ctx=True  top: POL-02#weekly-restock-budget (14.53), FAQ-01#what-happens-to-items-that-do-not-fit-the-weekly-budget (13.37), 
+[RP-03] HIT  rank=2   ctx=True  top: SUP-01#payment-terms (11.98), SUP-01#delivery (11.93), SUP-01#returns (11.61)
+[RP-04] HIT  rank=1   ctx=True  top: POL-01#approval-thresholds (15.3), FAQ-01#how-long-do-we-keep-requisition-records (8.1), POL-01#who-may-reques
+[RP-05] HIT  rank=1   ctx=True  top: PRC-02#school-terms-and-seasons (17.08), FAQ-01#who-sets-reorder-points (13.38), PRC-02#reorder-point (7.57)
+[RU-01] n/a  rank=-   ctx=None  top: SUP-01#overview (9.67), SUP-02#overview (7.03), SUP-01#returns (7.03)
+[RU-02] n/a  rank=-   ctx=None  top: SUP-02#overview (2.66), SUP-02#payment-terms (2.29), SUP-02#returns (2.08)
+[RU-03] n/a  rank=-   ctx=None  top: SUP-02#overview (3.32), SUP-01#overview (3.12), POL-02#budget-estimates (2.64)
+[RU-04] n/a  rank=-   ctx=None  top: PRC-02#how-much-to-order (7.33), GDE-02#data (7.01), GDE-02#checking-the-assistant (5.84)
+[RU-05] n/a  rank=-   ctx=None  top: SUP-01#overview (3.01), SUP-03#delivery (2.35), SUP-02#overview (2.3)
+
+hit@3 10/10 | context hit 10/10 | MRR 0.88
+===== py tests/test_week6_state_memory.py
+----------------------------------------------------------------------
+Ran 9 tests in 0.239s
+
+OK
+===== py tests/test_week7_evaluations.py
+----------------------------------------------------------------------
+Ran 31 tests in 1.456s
+
+OK
+===== py tests/test_week8_release_checks.py
+----------------------------------------------------------------------
+Ran 19 tests in 0.779s
+
+OK
+===== py tests/test_week6_storage.py
+PASS  test_schema_contains_week6_tables
+PASS  test_draft_and_audit_survive_new_storage_instance
+PASS  test_scope_prevents_cross_shop_draft_reads
+PASS  test_session_and_memory_are_scoped_and_deletable
+PASS  test_missing_scope_is_rejected
+PASS  test_registry_injects_scope_and_blocks_cross_shop_review
+PASS  test_model_cannot_supply_shop_context
+PASS  test_usual_weekly_budget_memory_is_explicit_scoped_and_deletable
+PASS  test_rag_index_isolated_by_tenant
+Week 6 storage: 9/9 passed

@@ -11,9 +11,9 @@ those values from trusted application context.  The model must never choose
 them.
 
 The first migration slice covers drafts, audit events, sessions, users and
-the small memory store planned for Week 6.  Existing JSON files remain the
-compatibility path until the callers are migrated and their regression tests
-have passed.
+the small memory store planned for Week 6.  Since F-26 (2026-10-23) the
+approval gate (approvals.py) and the restock agent also read drafts from
+here; the old data/drafts/*.json files are no longer used.
 """
 
 # ---------------------------------------------------------------------------
@@ -23,6 +23,8 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Iterator
+from contextlib import contextmanager    # _connect() opens, commits and always closes
 from typing import Any
 
 
@@ -48,12 +50,21 @@ class SQLiteStorage:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialise()
 
-    def _connect(self) -> sqlite3.Connection:
-        """Open a connection with row dictionaries and foreign keys enabled."""
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a connection with row dictionaries and foreign keys enabled, then close it."""
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        try:
+            # "with connection" commits on success and rolls back on an exception,
+            # but it does NOT close the connection.
+            with connection:
+                yield connection
+        finally:
+            # Close explicitly. On Windows an open connection keeps the .sqlite3 file
+            # locked, so temporary test databases could not be deleted (F-26 regression run).
+            connection.close()
 
     def _initialise(self) -> None:
         """Create the Week 6 schema safely when the database is first used."""

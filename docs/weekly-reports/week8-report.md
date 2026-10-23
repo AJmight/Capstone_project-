@@ -131,3 +131,32 @@ the release, Google Antigravity CLI for Weeks 6–7, Claude Code for Weeks 1–5
 `gemini-3.8-flash` as the runtime model, and DeepSeek/ChatGPT/Copilot for review
 and completion. **No prompt was changed in Week 8** — the defects were in the
 deterministic layer, and a prompt is not a fix for a function call.
+
+---
+
+## 7. Post-release integration fix (23 October 2026)
+
+After the `v1.0.0` tag, PR #1 merged a second Week 6 branch into `main`. The automatic conflict
+resolution kept one author's `approvals.py` / `restock_agent.py` (reading `data/drafts/*.json`)
+and the other author's `tools/procurement.py` / `storage.py` (saving drafts to SQLite). Result:
+**the human could not see or approve any draft the agent created**, and five offline tests
+failed. This is recorded as **F-26** (Critical, now Closed) in
+[`failure-catalogue.md`](../evaluation/failure-catalogue.md), with before/after runs in
+`evidence/final/f26_*_2026-10-23.txt`.
+
+| Suite (offline) | Before fix | After fix |
+|:---|:---:|:---:|
+| `test_week4_tools.py` | 20/22 | 22/22 |
+| `test_week5_agent.py` | 16/17 | 17/17 |
+| `test_mvp_tools.py` | 5/7 | 7/7 |
+| `test_week6_storage.py` | did not run (needed pytest; broken import) | 9/9 |
+| `test_week3_rag.py` (hit@3) / `test_week6_state_memory.py` / `test_week7_evaluations.py` / `test_week8_release_checks.py` | 10/10 / 9/9 / 31/31 / 19/19 | 10/10 / 9/9 / 31/31 / 19/19 |
+
+**Lesson:** each branch was green on its own; only a full run after the merge exposed the
+break. Every suite is now run after every merge, not only after every feature.
+
+### Contributions to this fix
+
+| Member | Work | Evidence |
+|:---|:---|:---|
+| Boonabaana Bronia | Reviewed the merged `main`, diagnosed F-26, ported `approvals.py` and `restock_agent.py` to `SQLiteStorage`, fixed the unclosed SQLite connections, made `test_week6_storage.py` runnable, recorded F-26. AI assistance: Claude Code (review and code changes; every change re-tested) | Branch `fix-draft-storage` |

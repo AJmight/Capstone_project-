@@ -57,6 +57,7 @@ from guardrails import (BudgetCeilingGuardrail, GuardrailViolation,
 from mcp_interface import MCPServer
 from memory import MemoryManager
 from state import StateManager, WorkflowStage
+from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage   # where drafts live (F-26)
 from tools import procurement          # deterministic tools
 
 
@@ -157,11 +158,11 @@ class TestApprovalAdvancesTheStateMachine(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.db = Path(self.tmp.name) / "state.db"
-        self.drafts = Path(self.tmp.name) / "drafts"
-        self.drafts.mkdir(parents=True, exist_ok=True)
+        # F-26: drafts live in the scoped SQLite store, the same one draft_requisition uses.
+        self.drafts_db = Path(self.tmp.name) / "drafts.sqlite3"
 
         # Point the project at temporary storage for the duration of the test.
-        self._real_drafts_dir = procurement.DRAFTS_DIR
+        self._real_storage_path = procurement.STORAGE_PATH
         self._real_state_cls = state_mod.StateManager
         self._real_memory_cls = memory_mod.MemoryManager
         self._opened = []                    # every manager we hand out, closed at the end
@@ -171,7 +172,7 @@ class TestApprovalAdvancesTheStateMachine(unittest.TestCase):
             self._opened.append(mgr)
             return mgr
 
-        procurement.DRAFTS_DIR = self.drafts
+        procurement.STORAGE_PATH = self.drafts_db
         state_mod.StateManager = lambda: self._state_factory()
         memory_mod.MemoryManager = _memory_factory
         self.addCleanup(self._restore)
@@ -195,7 +196,7 @@ class TestApprovalAdvancesTheStateMachine(unittest.TestCase):
                 pass
 
     def _restore(self):
-        procurement.DRAFTS_DIR = self._real_drafts_dir
+        procurement.STORAGE_PATH = self._real_storage_path
         state_mod.StateManager = self._real_state_cls
         memory_mod.MemoryManager = self._real_memory_cls
 
@@ -211,7 +212,9 @@ class TestApprovalAdvancesTheStateMachine(unittest.TestCase):
         return session.session_id
 
     def _write_draft(self, draft_id: str, total_ugx: int) -> None:
-        (self.drafts / f"{draft_id}.json").write_text(json.dumps({
+        # Saved through SQLiteStorage exactly as tools/procurement.draft_requisition does,
+        # in the default shop/user scope that approvals.decide() reads by default.
+        SQLiteStorage(self.drafts_db).save_draft({
             "draft_id": draft_id,
             "created_at": "2026-10-20T10:00:00+00:00",
             "created_by": "Tester",
@@ -225,7 +228,7 @@ class TestApprovalAdvancesTheStateMachine(unittest.TestCase):
             "budget_range_ugx": {"low": int(total_ugx * 0.9), "high": int(total_ugx * 1.1)},
             "requires_override_any": False,
             "decision": None,
-        }, indent=2), encoding="utf-8")
+        }, DEFAULT_TENANT_ID, DEFAULT_USER_ID)
 
     def test_approval_moves_the_session_to_approved(self):
         """A human approval advances AWAITING_APPROVAL -> APPROVED (F-24)."""

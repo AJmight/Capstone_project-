@@ -34,7 +34,7 @@ where an earlier draft of this catalogue broke that rule and how it was correcte
 
 ## 3. The Catalogue
 
-### 3.1 Summary table (F-01 to F-25)
+### 3.1 Summary table (F-01 to F-26)
 
 | ID | Week | Failure mode | Severity | Remediation applied | Evidence | Status |
 |:---|:---:|:---|:---:|:---|:---|:---|
@@ -63,6 +63,7 @@ where an earlier draft of this catalogue broke that rule and how it was correcte
 | **F-23** | W8 | **The MCP server could not call a tool at all.** `execute_tool()` was called with a keyword that does not exist and the returned tuple was unpacked as if it were a dict, so every real `tools/call` raised a `TypeError` that was reported as a generic JSON-RPC `-32000` error. The Week 6 unit tests never executed a `tools/call` | High | The call now uses the real signature `execute_tool(name, args, context, run_id)` and unpacks `(result, status)`; the status is reported to the client | `test_tools_call_executes_a_real_tool`, `test_tools_call_reports_a_blocked_tool_instead_of_crashing` | Closed |
 | **F-24** | W8 | **The human approval gate never advanced the state machine.** `approvals.decide()` recorded the decision but never touched the Week 6 FSM, so a session could never leave `AWAITING_APPROVAL` and the Week 6 claim "a human approval moves the workflow" was unproven | High | `decide()` now finds the session by draft id (`StateManager.find_session_by_draft_id`) and transitions it to `APPROVED`/`REJECTED`; the transition and the human's name are on the audit trail | `test_approval_moves_the_session_to_approved`, `test_rejection_moves_the_session_to_rejected` | Closed |
 | **F-25** | W8 | **The MCP server took the tenant from the model.** The `shop_id` was read from the model's arguments, so a model could ask for another shop's memories, defeating the Week 6 isolation work | Critical | The server owns the shop id (trusted configuration, validated at construction); a request for a different shop is refused with `TENANT_ISOLATION_VIOLATION` | `test_cross_shop_memory_request_is_refused` | Closed |
+| **F-26** | W8 (post-release merge) | **Drafts never reached the human.** Two Week 6 implementations were merged (PR #1, conflicts resolved automatically): `draft_requisition` saved drafts to SQLite (`data/state.sqlite3`) while `approvals.py` and `restock_agent.py` still read `data/drafts/*.json`. The agent reported a draft, `approvals.py list` showed nothing, and 5 offline tests failed with `No draft named REQ-…` | Critical | `approvals.py` v1.2.0 and `restock_agent.py` v1.3.0 read and write the same scoped `SQLiteStorage`; `SQLiteStorage._connect()` now closes connections (Windows file lock); `test_week6_storage.py` made runnable without pytest | `evidence/final/f26_baseline_offline_2026-10-23.txt` (before: 20/22, 16/17, 5/7) → `evidence/final/f26_regression_offline_2026-10-23.txt` (after: all suites pass) | Closed |
 
 ### 3.2 A note on the earlier draft of this catalogue (intellectual honesty)
 
@@ -93,11 +94,11 @@ Three consequences, all fixed in this version:
 
 | Status | Count | Ids |
 |:---|:---:|:---|
-| Closed | 21 | F-01, F-02, F-03, F-04, F-05, F-06, F-09, F-11, F-12, F-13, F-14, F-15, F-16, F-17, F-18, F-19, F-20, F-21, F-22, F-23, F-24, F-25 |
+| Closed | 23 | F-01, F-02, F-03, F-04, F-05, F-06, F-09, F-11, F-12, F-13, F-14, F-15, F-16, F-17, F-18, F-19, F-20, F-21, F-22, F-23, F-24, F-25, F-26 |
 | Mitigated by design | 1 | F-07 |
 | Monitored (design risk) | 1 | F-08 |
 | **Open (documented limitation)** | 1 | **F-10** |
-| **Total** | **25** | |
+| **Total** | **26** | |
 
 The one open item is F-10, a requirements finding rather than a bug: the 200%
 safety cap can only be reached through a supplier minimum order quantity or a
@@ -220,6 +221,29 @@ document answers "what went wrong":
   real low-stock list), `test_tools_call_reports_a_blocked_tool_instead_of_crashing`
   and `test_tools_call_reports_invalid_arguments`.
 
+### Case 7 — F-26: two correct halves, one broken system (post-release merge)
+
+- **Symptom.** After PR #1 merged a second Week 6 branch into `main`, the agent
+  still said "draft created, awaiting human approval", but `py srcpprovals.py list`
+  showed no drafts, so the human could never approve one. Offline suites dropped to
+  Week 4 20/22, Week 5 16/17 and MVP 5/7, all failing with `No draft named REQ-…`.
+- **Root cause.** The conflict resolution kept one author's version of the files
+  that conflicted (`approvals.py`, `restock_agent.py`) and the other author's
+  version of the files that did not (`tools/procurement.py`, `storage.py`). Each
+  half was internally correct; together they used two different draft stores. The
+  merge was accepted without re-running the offline suites (AGENTS.md rule 7).
+- **Remediation.** One draft store: `approvals.py` and `restock_agent.py` now use
+  `storage.SQLiteStorage` with the same shop/user scope as the tool. A second defect
+  found during the re-test — `SQLiteStorage` never closed its connections, so Windows
+  kept the database file locked — was fixed in `_connect()`.
+- **Re-test evidence.** Before/after runs in `evidence/final/f26_*_2026-10-23.txt`;
+  `test_week8_release_checks.py` approval tests now save their fixture through
+  `SQLiteStorage`; an offline end-to-end check (tool → list → edit → approve →
+  audit; another shop sees "not found").
+- **Lesson for the viva.** Unit tests per author were green on both branches; only
+  the integration run after the merge exposed the failure. Run every suite after every
+  merge, not only after every feature.
+
 ## 6. Evidence index
 
 | What | Where |
@@ -234,3 +258,4 @@ document answers "what went wrong":
 | Week 8 release checks (F-18…F-25) | `tests/test_week8_release_checks.py` |
 | Live traces | `evidence/week2/`, `evidence/week3/`, `evidence/week4/`, `evidence/week5/` |
 | One-page result summary | `evidence/final/evaluation_summary.md` |
+| F-26 merge regression (before / after) | `evidence/final/f26_baseline_offline_2026-10-23.txt`, `evidence/final/f26_regression_offline_2026-10-23.txt` |
