@@ -1,0 +1,13 @@
+# Streamlit theme for the SME Procurement Assistant web UI (src/streamlit_app.py).
+# Colours follow docs/ui-mockup.png so Streamlit's own widgets (buttons, inputs)
+# match the custom HTML panels: navy primary, white background.
+[theme]
+base = "light"
+primaryColor = "#1B2A5B"              # navy: Get Started button, focus rings
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F7F9FC"  # same light grey as the feature cards
+textColor = "#1B2A5B"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false              # do not send usage statistics to Streamlit

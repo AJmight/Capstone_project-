@@ -89,6 +89,20 @@ py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 > API key or the network. The verbatim output of the release run is in
 > [`evidence/final/regression_run_2026-10-20.md`](evidence/final/regression_run_2026-10-20.md).
 
+## Web UI (Streamlit) — in progress
+
+The browser version of `src\app.py`. It calls the same functions as the console menu and
+adds no business logic. Screen 1 (Home / Welcome, styled after `docs/ui-mockup.png`) is
+done; the other screens follow one at a time.
+
+```powershell
+pip install -r requirements.txt               # includes streamlit
+py -m streamlit run src\streamlit_app.py      # run from the repo root; opens http://localhost:8501
+py tests\test_ui_home.py                      # 5 offline UI tests (headless, no API key)
+```
+
+The home screen makes no model call, so it works without `GEMINI_API_KEY`.
+
 ## Repository layout
 
 | Path | Contents |
