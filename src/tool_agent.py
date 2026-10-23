@@ -76,6 +76,7 @@ from llm_client import AllModelsFailedError, MODELS, call_with_fallback, client
 from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 from tools import procurement
 from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations
+from trace_privacy import redact_record
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -144,7 +145,7 @@ def _write_trace(record: dict) -> None:
     try:
         TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with TRACE_PATH.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+            f.write(json.dumps(redact_record(record), default=str) + "\n")
     except OSError as e:
         print(f"[WARN] Could not write agent trace: {e}")
 
@@ -255,7 +256,8 @@ def run_agent(user_message: str, user_name: str = "shop user",
             else:
                 result, status = execute_tool(
                     call.name, args,
-                    context={"created_by": user_name, "tenant_id": tenant_id, "user_id": user_id},
+                    context={"created_by": user_name, "tenant_id": tenant_id,
+                             "user_id": user_id, "session_id": session_id},
                     run_id=run_id)
                 call_history.setdefault(key, []).append(result)
             if on_tool_result:
@@ -297,9 +299,13 @@ def run_agent(user_message: str, user_name: str = "shop user",
         "output_warnings": output_warnings,
         "latency_s": round(time.monotonic() - started, 2),
     }
-    _write_trace({"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                  "agent": trace_label, "user_message": user_message, "user_name": user_name,
-                  "limits": {"max_turns": max_turns, "max_tool_calls": max_tool_calls}, **result})
+    trace_record = {"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "agent": trace_label, "user_message": user_message, "user_name": user_name,
+                    "tenant_id": tenant_id, "user_id": user_id, "session_id": session_id,
+                    "limits": {"max_turns": max_turns, "max_tool_calls": max_tool_calls}, **result}
+    _write_trace(trace_record)
+    storage.append_trace(trace_record, tenant_id, user_id, session_id=session_id,
+                         run_id=run_id, event_type="agent")
     return result
 
 

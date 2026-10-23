@@ -40,6 +40,8 @@ if __package__ in (None, ""):                       # run directly: make src/ im
 from ai_engine import load_system_prompt            # reads the BEGIN/END part of a prompt file
 from llm_client import generate                     # Gemini with the fallback chain
 from rag.index import get_index
+from trace_privacy import redact_record
+from storage import DEFAULT_USER_ID, SQLiteStorage
 
 PROMPT_PATH = Path("prompts/policy_qa_v1.0.0.md")
 TRACE_PATH = Path("evidence/week3/rag_traces.jsonl")
@@ -92,11 +94,13 @@ def check_citations(answer: str, n_sources: int) -> dict:
 
 
 def answer_policy_question(question: str, label: str = "policy_qa",
-                           tenant_id: str = "default-shop") -> dict:
+                           tenant_id: str = "default-shop", user_id: str = DEFAULT_USER_ID,
+                           session_id: str | None = None) -> dict:
     """Full RAG pipeline for one question. Returns answer, sources, citation check, model."""
     sources = retrieve(question, tenant_id=tenant_id)
     record = {"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
               "question": question,
+              "tenant_id": tenant_id, "user_id": user_id, "session_id": session_id,
               "retrieved": [{"label": f"S{i}", "chunk_id": s["chunk_id"], "score": s["score"]}
                             for i, s in enumerate(sources, 1)]}
 
@@ -116,7 +120,9 @@ def answer_policy_question(question: str, label: str = "policy_qa",
                           "section": s["section"], "source": s["source"]} for i, s in enumerate(sources, 1)]
     TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with TRACE_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+        f.write(json.dumps(redact_record(record)) + "\n")
+    SQLiteStorage().append_trace(record, tenant_id, user_id, session_id=session_id,
+                                 event_type="policy")
     return record
 
 

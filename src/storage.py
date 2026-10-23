@@ -20,15 +20,19 @@ have passed.
 # Imports and configuration
 # ---------------------------------------------------------------------------
 import json
+import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+from trace_privacy import redact_record
 
 
 DEFAULT_DB_PATH = Path("data/state.sqlite3")
 DEFAULT_TENANT_ID = "default-shop"
 DEFAULT_USER_ID = "default-user"
+DEFAULT_TRACE_RETENTION_DAYS = 30
 
 
 class StorageError(Exception):
@@ -127,6 +131,24 @@ class SQLiteStorage:
                     FOREIGN KEY (tenant_id, user_id)
                         REFERENCES users (tenant_id, user_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS trace_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    session_id TEXT,
+                    run_id TEXT,
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    FOREIGN KEY (tenant_id, user_id)
+                        REFERENCES users (tenant_id, user_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_trace_scope
+                    ON trace_events (tenant_id, user_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_trace_expiry
+                    ON trace_events (expires_at);
                 """
             )
 
@@ -291,6 +313,75 @@ class SQLiteStorage:
                 (session_id, tenant_id, user_id),
             ).fetchone()
         return json.loads(row["state_json"]) if row else None
+
+    def append_trace(self, payload: dict[str, Any], tenant_id: str, user_id: str,
+                     session_id: str | None = None, run_id: str | None = None,
+                     event_type: str = "trace", retention_days: int | None = None,
+                     created_at: str | None = None) -> int:
+        """Persist one redacted trace under a trusted scope and retention deadline."""
+        self._require_scope(tenant_id, user_id)
+        if not event_type.strip():
+            raise StorageError("event_type is required")
+        days = retention_days
+        if days is None:
+            days = int(os.getenv("TRACE_RETENTION_DAYS", str(DEFAULT_TRACE_RETENTION_DAYS)))
+        if isinstance(days, bool) or not isinstance(days, int) or days <= 0:
+            raise StorageError("trace retention must be a positive whole number of days")
+        created = created_at or _now()
+        try:
+            created_dt = datetime.fromisoformat(created)
+        except ValueError as error:
+            raise StorageError("trace created_at must be an ISO timestamp") from error
+        expires = (created_dt + timedelta(days=days)).isoformat(timespec="seconds")
+        self.ensure_user(tenant_id, user_id, user_id)
+        self.delete_expired_traces(created, tenant_id=tenant_id)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """INSERT INTO trace_events
+                   (created_at, expires_at, tenant_id, user_id, session_id, run_id,
+                    event_type, payload_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (created, expires, tenant_id, user_id, session_id, run_id, event_type,
+                 json.dumps(redact_record(payload), default=str)),
+            )
+        return int(cursor.lastrowid)
+
+    def list_traces(self, tenant_id: str, user_id: str, session_id: str | None = None,
+                    include_expired: bool = False) -> list[dict[str, Any]]:
+        """List only traces in the supplied scope; expired records are hidden by default."""
+        self._require_scope(tenant_id, user_id)
+        query = """SELECT * FROM trace_events
+                   WHERE tenant_id = ? AND user_id = ?"""
+        parameters: list[Any] = [tenant_id, user_id]
+        if session_id is not None:
+            query += " AND session_id = ?"
+            parameters.append(session_id)
+        if not include_expired:
+            query += " AND expires_at > ?"
+            parameters.append(_now())
+        query += " ORDER BY event_id"
+        with self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [{
+            "event_id": row["event_id"], "created_at": row["created_at"],
+            "expires_at": row["expires_at"], "tenant_id": row["tenant_id"],
+            "user_id": row["user_id"], "session_id": row["session_id"],
+            "run_id": row["run_id"], "event_type": row["event_type"],
+            "payload": json.loads(row["payload_json"]),
+        } for row in rows]
+
+    def delete_expired_traces(self, now: str | None = None, tenant_id: str | None = None) -> int:
+        """Delete expired traces, optionally limited to one tenant."""
+        cutoff = now or _now()
+        query = "DELETE FROM trace_events WHERE expires_at <= ?"
+        parameters: list[Any] = [cutoff]
+        if tenant_id is not None:
+            self._require_scope(tenant_id, "retention-maintenance")
+            query += " AND tenant_id = ?"
+            parameters.append(tenant_id)
+        with self._connect() as connection:
+            cursor = connection.execute(query, parameters)
+        return cursor.rowcount
 
     def remember(self, tenant_id: str, user_id: str, memory_key: str, value: Any,
                  expires_at: str | None = None) -> None:

@@ -65,6 +65,7 @@ from tools import procurement                 # DRAFT_STATUS, DRAFTS_DIR
 from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 from tools.registry import execute_tool
 from tool_agent import run_agent              # the bounded model <-> tool loop (Week 4, extended)
+from trace_privacy import redact_record
 
 # ---------------------------------------------------------------------------
 # The task contract in code (mirrors docs/requirements/agent-task-contract.md)
@@ -296,12 +297,17 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                    "tools": sorted(CONTRACT_TOOLS)},
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    trace_record = redact_record(record)
     with RUNS_LOG.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, default=str) + "\n")
+        f.write(json.dumps(trace_record, default=str) + "\n")
+    SQLiteStorage(procurement.STORAGE_PATH).append_trace(
+        record, tenant_id, user_id, session_id=session_id,
+        run_id=run.get("run_id") if run else None, event_type="restock",
+    )
     if save_trace_as:
-        (OUT_DIR / f"trace_{save_trace_as}.json").write_text(json.dumps(record, indent=2, default=str),
+        (OUT_DIR / f"trace_{save_trace_as}.json").write_text(json.dumps(trace_record, indent=2, default=str),
                                                              encoding="utf-8")
-        (OUT_DIR / f"trace_{save_trace_as}.md").write_text(render_trace_md(record), encoding="utf-8")
+        (OUT_DIR / f"trace_{save_trace_as}.md").write_text(render_trace_md(trace_record), encoding="utf-8")
     return record
 
 

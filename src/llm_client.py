@@ -57,6 +57,7 @@ import httpx                                  # the HTTP library the Gemini SDK 
 from dotenv import load_dotenv                # loads key=value pairs from the .env file
 from google import genai                      # official Google Gemini SDK (google-genai)
 from google.genai import errors, types        # SDK error classes and request/response types
+from trace_privacy import redact_record       # optional trace privacy boundary
 
 # Read .env into environment variables so os.getenv() below can see them.
 load_dotenv()
@@ -161,7 +162,7 @@ def _write_trace(record: dict) -> None:
     try:
         TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)   # create evidence/traces/ if missing
         with TRACE_PATH.open("a", encoding="utf-8") as f:      # "a" = append, keep old lines
-            f.write(json.dumps(record) + "\n")
+            f.write(json.dumps(redact_record(record)) + "\n")
     except OSError as e:
         print(f"[WARN] Could not write trace: {e}")
 

@@ -55,6 +55,8 @@ from datetime import datetime, timezone       # trace timestamps
 from pathlib import Path                      # trace file path
 
 from tools import knowledge, procurement      # deterministic tool functions (CSV tools + policy search)
+from trace_privacy import redact_record       # optional trace privacy boundary
+from storage import SQLiteStorage
 
 TRACE_PATH = Path("evidence/week4/tool_traces.jsonl")
 
@@ -287,7 +289,7 @@ def _trace(record: dict) -> None:
     try:
         TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with TRACE_PATH.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+            f.write(json.dumps(redact_record(record), default=str) + "\n")
     except OSError as e:
         print(f"[WARN] Could not write tool trace: {e}")
 
@@ -356,9 +358,17 @@ def execute_tool(name: str, args: dict | None, context: dict | None = None,
         "user": context.get("created_by"),
         "tenant_id": context.get("tenant_id"),
         "user_id": context.get("user_id"),
+        "session_id": context.get("session_id"),
         "args": args,
         "status": status,
         "latency_ms": round((time.monotonic() - started) * 1000, 1),
         "result": result,
     })
+    if context.get("tenant_id") and context.get("user_id"):
+        SQLiteStorage(procurement.STORAGE_PATH).append_trace(
+            {"tool": name, "args": args, "status": status, "result": result,
+             "user": context.get("created_by")},
+            context["tenant_id"], context["user_id"],
+            session_id=context.get("session_id"), run_id=run_id, event_type="tool",
+        )
     return result, status
