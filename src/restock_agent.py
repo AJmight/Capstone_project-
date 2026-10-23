@@ -50,7 +50,7 @@ Usage (PowerShell, repo root):
   py src\\restock_agent.py --budget 300000 --save-trace T2_budget_replan
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.2.0 (Week 8 hardening: hard budget ceiling via BudgetCeilingGuardrail, F-12)
+Version: 1.3.0 (F-26: agent_checks written to the SQLite draft; no crash when budget_ugx is omitted)
 """
 
 # ---------------------------------------------------------------------------
@@ -63,7 +63,8 @@ from datetime import datetime, timezone       # timestamps
 from pathlib import Path                      # file paths
 
 from guardrails import (BudgetCeilingGuardrail, GuardrailViolation)   # Week 7 guardrails
-from tools import procurement                 # DRAFT_STATUS, DRAFTS_DIR
+from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage   # where drafts are saved (F-26)
+from tools import procurement                 # DRAFT_STATUS, STORAGE_PATH
 from tools.registry import execute_tool
 from tool_agent import run_agent              # the bounded model <-> tool loop (Week 4, extended)
 
@@ -132,8 +133,12 @@ class AgentState:
         if name == "plan_within_budget":
             self.plan = result
             inc = [i["item_id"] for i in result["included"]]
+            # budget_ugx is None when the model called the tool without a budget ("no limit");
+            # formatting None with :, would crash the whole run, so print it as words instead.
+            limit = (f"UGX {result['budget_ugx']:,}" if result.get("budget_ugx") is not None
+                     else "no budget limit")
             self.log("OBSERVE", f"plan: include {inc} = UGX {result['planned_total_ugx']:,} of "
-                                f"UGX {result['budget_ugx']:,}; deferred "
+                                f"{limit}; deferred "
                                 f"{[d['item_id'] for d in result['deferred']]}; needs human "
                                 f"{[h['item_id'] for h in result['needs_human']]}")
             if result["deferred"]:
@@ -372,13 +377,16 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                     pass
 
         # Tell the approver if the agent's own checks failed on a draft it created.
+        # F-26: drafts live in SQLite (storage.SQLiteStorage), not data/drafts/*.json any more.
+        # run_agent() above uses the default shop/user scope, so the draft is read back with
+        # the same scope; approvals.py then shows these agent_checks next to the draft.
         if state.drafts_created:
-            path = procurement.DRAFTS_DIR / f"{state.drafts_created[0]}.json"
-            if path.exists():
-                record = json.loads(path.read_text(encoding="utf-8"))
+            storage = SQLiteStorage(procurement.STORAGE_PATH)
+            record = storage.load_draft(state.drafts_created[0], DEFAULT_TENANT_ID, DEFAULT_USER_ID)
+            if record is not None:
                 record["agent_checks"] = {"outcome": state.outcome, "postconditions": state.postconditions,
                                           "budget_ugx": budget_ugx}
-                path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+                storage.update_draft(record, DEFAULT_TENANT_ID, DEFAULT_USER_ID)
 
     state.handoffs = _handoffs(state)
     state.log("STOP", f"outcome {state.outcome}"

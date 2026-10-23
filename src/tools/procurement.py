@@ -18,7 +18,7 @@ THE FOUR TOOLS
   2. compare_supplier_quotes(item)       -> all quotes for one item, cheapest first
   3. estimate_reorder_quantity(item)     -> reorder quantity + full working + 200% cap
   4. draft_requisition(items)            -> builds a DRAFT requisition, saves it to
-                                            data/drafts/ (the only "side effect"),
+                                            data/state.sqlite3 (the only "side effect"),
                                             status always "DRAFT - AWAITING HUMAN APPROVAL"
   5. plan_within_budget(items, budget)   -> (Week 5) which low items fit a budget, most urgent
                                             first; the rest are "deferred" or "needs_human"
@@ -70,9 +70,12 @@ from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 # (procurement.DATA_DIR = ...) to simulate missing or broken data.
 DATA_DIR = Path("data")
 
-# Where draft requisitions are written. This is git-ignored: drafts are runtime records.
-DRAFTS_DIR = Path("data/drafts")
+# Where draft requisitions are written: the scoped SQLite store (storage.SQLiteStorage).
+# Git-ignored: drafts are runtime records. approvals.py reads the same file (F-26).
 STORAGE_PATH = Path("data/state.sqlite3")
+# Legacy JSON folder used before Week 6. Nothing reads or writes it any more; it is kept
+# only so older tests that sandbox it still import cleanly.
+DRAFTS_DIR = Path("data/drafts")
 
 # Business-rule constants, named so a reviewer can find and question them.
 SAFETY_MULTIPLIER = Fraction(3, 2)   # order enough for 1.5 months of average demand

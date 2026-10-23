@@ -1,13 +1,23 @@
-"""Focused offline checks for the Week 6 central SQLite storage boundary."""
+"""Focused offline checks for the Week 6 central SQLite storage boundary.
+
+Run from the repo root (no pytest needed):  py tests	est_week6_storage.py
+Each test receives a fresh temporary folder (the same idea as pytest's tmp_path),
+so nothing touches the real data/state.sqlite3 or the evidence files.
+
+2026-10-23 (F-26): the weekly-budget helper functions this file used to import
+from memory.py did not survive the Week 6 merge (main kept memory.MemoryManager,
+tested in test_week6_state_memory.py). The memory test below now checks the same
+promise (scoped, expiring, deletable) directly on SQLiteStorage.
+"""
 
 import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from storage import SQLiteStorage, StorageError
-from memory import (MemoryError, forget_usual_weekly_budget,
-                     recall_usual_weekly_budget, remember_usual_weekly_budget)
 from rag import index as rag_index
 from tools.knowledge import search_policy
 from tools import procurement, registry
@@ -31,11 +41,12 @@ def _draft(draft_id: str) -> dict:
 
 def test_schema_contains_week6_tables(tmp_path):
     store = SQLiteStorage(tmp_path / "state.sqlite3")
-    tables = {
-        row[0] for row in store._connect().execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        )
-    }
+    with store._connect() as connection:          # _connect() is a context manager (closes the file)
+        tables = {
+            row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
     assert {"users", "sessions", "drafts", "draft_lines", "audit_events", "memories"} <= tables
 
 
@@ -121,18 +132,19 @@ def test_model_cannot_supply_shop_context(tmp_path):
 
 
 def test_usual_weekly_budget_memory_is_explicit_scoped_and_deletable(tmp_path):
-    """The one allowed memory helps choose a default but never makes a decision."""
+    """The weekly-budget memory is scoped to one shop, expires, and can be deleted."""
     store = SQLiteStorage(tmp_path / "state.sqlite3")
-    remember_usual_weekly_budget(store, "shop-a", "alice", 300000)
-    assert recall_usual_weekly_budget(store, "shop-a", "alice") == 300000
-    assert recall_usual_weekly_budget(store, "shop-b", "bob") is None
-    try:
-        remember_usual_weekly_budget(store, "shop-a", "alice", 0)
-        raise AssertionError("invalid budget was remembered")
-    except MemoryError:
-        pass
-    forget_usual_weekly_budget(store, "shop-a", "alice")
-    assert recall_usual_weekly_budget(store, "shop-a", "alice") is None
+    key = "usual_weekly_budget_ugx"
+    in_90_days = (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(timespec="seconds")
+    store.remember("shop-a", "alice", key, 300000, in_90_days)
+    assert store.recall("shop-a", "alice", key) == 300000
+    assert store.recall("shop-b", "bob", key) is None             # another shop never sees it
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(timespec="seconds")
+    store.remember("shop-a", "alice", key, 250000, yesterday)
+    assert store.recall("shop-a", "alice", key) is None           # an expired memory is not used
+    store.remember("shop-a", "alice", key, 300000, in_90_days)
+    store.delete_memory("shop-a", "alice", key)                   # the owner asked to forget it
+    assert store.recall("shop-a", "alice", key) is None
 
 
 def test_rag_index_isolated_by_tenant(tmp_path):
@@ -167,3 +179,23 @@ def test_rag_index_isolated_by_tenant(tmp_path):
     finally:
         rag_index.TENANTS_ROOT, rag_index.CORPUS_DIR = saved_root, saved_corpus
         rag_index.get_index.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# Plain runner: pytest is not in requirements.txt, so `py tests	est_week6_storage.py`
+# must run every test itself (before 2026-10-23 that command silently ran nothing).
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    tests = [(name, fn) for name, fn in list(globals().items())
+             if name.startswith("test_") and callable(fn)]
+    passed = 0
+    for name, fn in tests:
+        with tempfile.TemporaryDirectory() as folder:   # a fresh tmp_path per test
+            try:
+                fn(Path(folder))
+                passed += 1
+                print(f"PASS  {name}")
+            except Exception as error:                  # report and keep going
+                print(f"FAIL  {name}: {type(error).__name__}: {error}")
+    print(f"Week 6 storage: {passed}/{len(tests)} passed")
+    sys.exit(0 if passed == len(tests) else 1)

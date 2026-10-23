@@ -1,0 +1,75 @@
+F-26 baseline: offline suites on main @ 2d9644b BEFORE the draft-storage fix (2026-10-23T22:04:44+03:00)
+
+===== py tests/test_week4_tools.py --offline
+======================================================================
+OFFLINE TOOL TESTS (no model calls)
+======================================================================
+[O-01] PASS  get_low_stock returns exactly the items with stock <= reorder point.
+[O-02] PASS  estimate_reorder_quantity matches the independent formula for every low item (F-04).
+[O-03] PASS  The three quantities gemini-3.5-flash-lite got wrong in Week 2 are now exact.
+[O-04] PASS  A4 Exercise Books (stock 45 > 10) is never recommended (Week 2 TC-06 problem).
+[O-05] PASS  Items without purchase history get 0 and a human-must-decide basis (no invented default).
+[O-06] PASS  compare_supplier_quotes lists quotes cheapest first.
+[O-07] PASS  Items can be named the way users talk ('bic pens (blue)', 'calculator').
+[O-08] PASS  'pens' matches two items -> AMBIGUOUS_ITEM; 'ITM999' -> UNKNOWN_ITEM. No guessing.
+[O-09] PASS  draft_requisition computes lines, totals, +/-10% range and saves a DRAFT record.
+[O-10] PASS  Well-stocked items are skipped with a reason; only low items get lines.
+[O-11] PASS  If no requested item is low, no draft file is written.
+[O-12] PASS  MOQ can push a quantity over 200% of the largest past purchase -> requires_override.
+[O-13] PASS  A missing CSV gives INVALID_DATA, not a crash (simulated unavailable service).
+[O-14] PASS  A CSV without reorder_point, or with a non-number, gives INVALID_DATA naming the problem.
+[O-15] PASS  Asking for a tool that is not on the allow-list (e.g. approve_requisition) is blocked.
+[O-16] PASS  The agent is offered every tool, and none of them can approve, order, pay or contact anyone.
+    (Replaces the old viewer-role test: user roles were removed on 2026-10-13 - single trusted user.)
+[O-17] PASS  Missing, extra, wrong-type and empty arguments are rejected before the tool runs.
+[O-18] PASS  created_by comes from the session; the model trying to set it is rejected.
+[O-19] PASS  A crashing tool -> TOOL_ERROR; a tool returning a non-dict -> UNEXPECTED_RESPONSE.
+[O-20] PASS  Allowed and blocked calls are both written to the tool trace.
+[O-21] FAIL  Humans approve/reject in approvals.py: reasons required, no double decisions, audit log.
+        ApprovalError: No draft named REQ-20261023-190444-77A0 in C:\Users\user\AppData\Local\Temp\tmpnvtlg39z\drafts
+[O-22] FAIL  Approving a draft with a line over the 200% cap requires a reason (US 12).
+        ApprovalError: No draft named REQ-20261023-190445-FA52 in C:\Users\user\AppData\Local\Temp\tmpmucg7hq0\drafts
+
+Offline: 20/22 passed
+
+===== py tests/test_week5_agent.py --offline
+======================================================================
+OFFLINE AGENT TESTS (scripted fake model, no quota)
+======================================================================
+[A-01] PASS  Ideal model, UGX 300,000: plan -> draft of exactly the 4 included items (UGX 294,130).
+[A-02] PASS  Deferred items, needs-human items and the approval step are listed for the human.
+[A-03] PASS  plan_within_budget fails once (injected) -> retried once -> recovery recorded -> DRAFT_READY.
+[A-04] PASS  Fails twice: the second retry is blocked by the repeat guard; no draft is made.
+[A-05] PASS  UGX 10,000: nothing fits -> no draft -> NOTHING_FITS_BUDGET.
+[A-06] FAIL  A model that drafts items outside the plan is caught: POSTCONDITION_FAILED, flagged on the draft.
+        KeyError: 'agent_checks'
+[A-07] PASS  Two drafts in one run break 'at most one draft' -> POSTCONDITION_FAILED.
+[A-08] PASS  A model repeating the same call is blocked (REPEATED_CALL) and stopped by the turn limit.
+[A-09] PASS  compare_supplier_quotes is a real tool but not in this task's contract -> blocked.
+[A-10] PASS  Every model 503 -> HANDOFF_MODEL_UNAVAILABLE with a clear message; no draft.
+[A-11] PASS  If the summary omits 'AWAITING HUMAN APPROVAL', the run is not reported as ready.
+[A-12] PASS  A bad budget (0, negative, not a whole number) stops before any model call (fake would crash if called).
+    (The old viewer-role precondition was removed with user roles on 2026-10-13.)
+[A-13] PASS  If nothing is low, SENSE stops the run (NOTHING_TO_DO) without spending model quota.
+[A-14] PASS  plan_within_budget: urgency order, skip-and-continue, needs_human, budget validation.
+[A-15] PASS  The Markdown trace has the phases a marker looks for.
+[A-16] PASS  F-13: the model writes a fake 'awaiting approval' summary without drafting -> code corrects and flags it.
+[A-17] PASS  A model asking for many different tool calls is cut off at MAX_TOOL_CALLS (LIMIT) -> HANDOFF.
+
+Offline: 16/17 passed
+
+===== py tests/test_mvp_tools.py --offline
+======================================================================
+OFFLINE MVP TESTS
+======================================================================
+[M-O01] PASS  get_inventory('office') returns only Office items, with is_low flags; no category = all 15.
+[M-O02] PASS  An unknown category (the old 'dairy' story) gives UNKNOWN_CATEGORY listing real categories.
+[M-O03] PASS  query_purchase_history totals match an independent recomputation (March-May 2025, Bic Pens).
+[M-O04] PASS  No data for Nov 2024 -> note + data_range; bad month and reversed range -> INVALID_PARAMETER.
+[M-O05] PASS  search_policy via the registry returns source IDs; bad top_k rejected.
+[M-O06] FAIL  US 9: editing a line keeps the AI suggestion, recomputes totals, and is audited.
+        ApprovalError: No draft named REQ-20261023-190450-3995 in C:\Users\user\AppData\Local\Temp\tmp7e4ttqlk\drafts
+[M-O07] FAIL  Edit needs a reason, only on undecided drafts, only existing lines; >cap sets requires_override.
+        ApprovalError: No draft named REQ-20261023-190450-790A in C:\Users\user\AppData\Local\Temp\tmpm81289wt\drafts
+
+Offline: 5/7 passed
