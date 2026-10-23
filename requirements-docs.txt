@@ -1,0 +1,5 @@
+# Tools to rebuild the hand-in documents (not needed to run the app or to deploy it).
+#   py scripts\export_report.py   -> docs\final\final-report.docx / .pdf  (also needs Microsoft Word)
+#   py scripts\build_slides.py    -> docs\final\presentation.pptx
+markdown==3.11.2
+python-pptx==1.0.2
