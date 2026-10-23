@@ -93,8 +93,13 @@ FEATURES = [
 # "<script>" cannot inject markup; the user's name is only shown via st.success.
 # Colours: navy #1B2A5B and orange #F5A100, as in the mockup.
 # ---------------------------------------------------------------------------
+# Page files for the five features, in the same order as FEATURES.
+PAGES = ["pages/1_Ask_the_assistant.py", "pages/2_Weekly_restock.py", "pages/3_Policy_questions.py",
+         "pages/4_Review_and_approve.py", "pages/5_Stock_overview.py"]
+
 CSS = """
 <style>
+  [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none; }
   /* Hide Streamlit's own top bar and footer so the page looks like an app, not a notebook. */
   header[data-testid="stHeader"], footer { visibility: hidden; height: 0; }
   .block-container { padding-top: 1.2rem; padding-bottom: 1rem; max-width: 1400px; }
@@ -258,8 +263,10 @@ def render_home() -> None:
                 st.session_state["user"] = name.strip()   # kept across re-runs for later screens
 
         if "user" in st.session_state:
-            st.success(f"Logged in as {st.session_state['user']}. "
-                       "The next screen is coming next.")
+            st.success(f"Logged in as {st.session_state['user']}. Choose a screen:")
+            # Links to the five screens in src/pages/ (one per app.py menu option).
+            for page, (icon, title, _) in zip(PAGES, FEATURES):
+                st.page_link(page, label=title, icon=icon)
 
 
 # ---------------------------------------------------------------------------
