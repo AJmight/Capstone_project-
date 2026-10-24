@@ -11,6 +11,7 @@ promise (scoped, expiring, deletable) directly on SQLiteStorage.
 """
 
 import sys
+import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ from storage import SQLiteStorage, StorageError
 from rag import index as rag_index
 from tools.knowledge import search_policy
 from tools import procurement, registry
+import tenant_context
 
 
 def _draft(draft_id: str) -> dict:
@@ -95,10 +97,19 @@ def test_missing_scope_is_rejected(tmp_path):
 def test_registry_injects_scope_and_blocks_cross_shop_review(tmp_path):
     """The model cannot select scope; the trusted context owns draft isolation."""
     saved_data, saved_storage, saved_trace = procurement.DATA_DIR, procurement.STORAGE_PATH, registry.TRACE_PATH
+    saved_tenants_root = tenant_context.TENANTS_ROOT
     try:
         procurement.DATA_DIR = Path("data")
         procurement.STORAGE_PATH = tmp_path / "state.sqlite3"
         registry.TRACE_PATH = tmp_path / "tool-traces.jsonl"
+        # Business-scoped tools only read the active tenant folder. Seed this
+        # test tenant from fixtures so the draft exercises the same isolation
+        # boundary as the app without depending on shared/default-shop files.
+        tenant_context.TENANTS_ROOT = tmp_path / "tenants"
+        tenant_dir = tenant_context.tenant_data_dir("shop-a")
+        tenant_dir.mkdir(parents=True)
+        for filename in tenant_context.CSV_FILES[:3]:
+            shutil.copyfile(Path("data") / filename, tenant_dir / filename)
         result, status = registry.execute_tool(
             "draft_requisition", {"items": ["ITM001"]},
             context={"created_by": "Alice", "tenant_id": "shop-a", "user_id": "alice"},
@@ -113,6 +124,7 @@ def test_registry_injects_scope_and_blocks_cross_shop_review(tmp_path):
         procurement.DATA_DIR, procurement.STORAGE_PATH, registry.TRACE_PATH = (
             saved_data, saved_storage, saved_trace
         )
+        tenant_context.TENANTS_ROOT = saved_tenants_root
 
 
 def test_model_cannot_supply_shop_context(tmp_path):
