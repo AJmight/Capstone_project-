@@ -17,6 +17,7 @@ from pathlib import Path
 from guardrails import InputGuardrail
 
 
+STARTER_DATA_DIR = Path("data")
 DATA_ROOT = Path(os.environ.get("SME_DATA_DIR", "data"))
 TENANTS_ROOT = DATA_ROOT / "tenants"
 POLICY_SOURCE_DIR = Path("knowledge/corpus")
@@ -72,7 +73,9 @@ def initialize_business_data(tenant_id: str) -> Path:
             if filename in TENANT_ONLY_HEADERS:
                 target.write_text(",".join(TENANT_ONLY_HEADERS[filename]) + "\n", encoding="utf-8")
                 continue
-            source = DATA_ROOT / filename
+            # Templates remain in the code checkout; tenant records may live on
+            # a separate persistent Render mount selected by SME_DATA_DIR.
+            source = STARTER_DATA_DIR / filename
             if not source.is_file():
                 raise FileNotFoundError(f"Starter data file is missing: {source}")
             # Only the header is shared. Demo/training rows must never appear as a

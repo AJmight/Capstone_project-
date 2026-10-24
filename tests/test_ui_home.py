@@ -165,6 +165,20 @@ def test_ui07_business_stock_is_isolated():
     assert procurement.get_inventory(tenant_id=shop_b)["count"] == 0
 
 
+def test_ui10_business_data_can_use_a_separate_storage_root():
+    saved_root, saved_tenants = tenant_context.DATA_ROOT, tenant_context.TENANTS_ROOT
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            tenant_context.DATA_ROOT = Path(folder)
+            tenant_context.TENANTS_ROOT = Path(folder) / "tenants"
+            tenant_id = tenant_context.business_tenant_id("External Mount Shop")
+            path = tenant_context.initialize_business_data(tenant_id)
+            with (path / "current_stock.csv").open(encoding="utf-8", newline="") as source:
+                assert list(csv.DictReader(source)) == []
+    finally:
+        tenant_context.DATA_ROOT, tenant_context.TENANTS_ROOT = saved_root, saved_tenants
+
+
 def test_ui09_policy_documents_are_editable_and_isolated():
     shop_a = tenant_context.business_tenant_id("Policy Shop A")
     shop_b = tenant_context.business_tenant_id("Policy Shop B")
