@@ -40,6 +40,7 @@ if __package__ in (None, ""):                       # run directly: make src/ im
 from ai_engine import load_system_prompt            # reads the BEGIN/END part of a prompt file
 from llm_client import generate                     # Gemini with the fallback chain
 from rag.index import get_index
+from tenant_context import tenant_data_dir
 
 PROMPT_PATH = Path("prompts/policy_qa_v1.0.0.md")
 TRACE_PATH = Path("evidence/week3/rag_traces.jsonl")
@@ -96,6 +97,7 @@ def answer_policy_question(question: str, label: str = "policy_qa",
     """Full RAG pipeline for one question. Returns answer, sources, citation check, model."""
     sources = retrieve(question, tenant_id=tenant_id)
     record = {"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "tenant_id": tenant_id,
               "question": question,
               "retrieved": [{"label": f"S{i}", "chunk_id": s["chunk_id"], "score": s["score"]}
                             for i, s in enumerate(sources, 1)]}
@@ -114,8 +116,12 @@ def answer_policy_question(question: str, label: str = "policy_qa",
 
     record["sources"] = [{"label": f"S{i}", "chunk_id": s["chunk_id"], "title": s["title"],
                           "section": s["section"], "source": s["source"]} for i, s in enumerate(sources, 1)]
-    TRACE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with TRACE_PATH.open("a", encoding="utf-8") as f:
+    # Questions and answers can contain private shop details, so runtime traces
+    # for named businesses stay in that tenant's folder rather than a shared log.
+    trace_path = (TRACE_PATH if tenant_id == "default-shop"
+                  else tenant_data_dir(tenant_id) / "policy_qa_traces.jsonl")
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
     return record
 

@@ -45,6 +45,7 @@ Version: 1.1.0 (Week 3: stemmer fix, boilerplate chunks removed)
 # Imports
 # ---------------------------------------------------------------------------
 import math                                   # log() for idf
+import os                                     # Render can set a persistent data mount path
 import re                                     # tokenising and heading detection
 from collections import Counter               # word counts per chunk
 from dataclasses import dataclass             # Chunk record
@@ -187,15 +188,17 @@ class BM25Index:
         return out
 
 
-TENANTS_ROOT = Path("tenants")
+TENANTS_ROOT = Path(os.environ.get("SME_DATA_DIR", "data")) / "tenants"
 
 
 def _tenant_corpus(tenant_id: str) -> Path:
-    """Resolve corpus from trusted tenant context, with the prototype fallback."""
+    """Resolve a shop's own corpus; only the legacy default shop uses shared starter docs."""
     if not isinstance(tenant_id, str) or not tenant_id.strip():
         raise ValueError("tenant_id is required for RAG access")
     tenant_corpus = TENANTS_ROOT / tenant_id / "knowledge" / "corpus"
-    return tenant_corpus if tenant_corpus.exists() else CORPUS_DIR
+    if tenant_id == "default-shop" and not tenant_corpus.exists():
+        return CORPUS_DIR
+    return tenant_corpus
 
 
 @lru_cache(maxsize=32)

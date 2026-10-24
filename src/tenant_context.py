@@ -8,15 +8,18 @@ independent copy of the starter CSVs so one business's edits never affect anothe
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import shutil
 import unicodedata
 from pathlib import Path
 
 from guardrails import InputGuardrail
 
 
-DATA_ROOT = Path("data")
+DATA_ROOT = Path(os.environ.get("SME_DATA_DIR", "data"))
 TENANTS_ROOT = DATA_ROOT / "tenants"
+POLICY_SOURCE_DIR = Path("knowledge/corpus")
 TENANT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,40}$")
 CSV_FILES = ("current_stock.csv", "past_purchases.csv", "supplier_quotes.csv", "sales.csv")
 TENANT_ONLY_HEADERS = {
@@ -54,6 +57,11 @@ def tenant_data_dir(tenant_id: str) -> Path:
     return TENANTS_ROOT / validate_tenant_id(tenant_id)
 
 
+def tenant_policy_dir(tenant_id: str) -> Path:
+    """Return the private policy folder for one validated business workspace."""
+    return tenant_data_dir(tenant_id) / "knowledge" / "corpus"
+
+
 def initialize_business_data(tenant_id: str) -> Path:
     """Create empty business CSVs from the shared schema, never copy sample records."""
     destination = tenant_data_dir(tenant_id)
@@ -73,4 +81,14 @@ def initialize_business_data(tenant_id: str) -> Path:
                 header = template.readline()
             with target.open("w", encoding="utf-8", newline="") as business_file:
                 business_file.write(header)
+    # Give each shop its own editable copy of the starter policies. A first-time
+    # workspace can ask grounded questions immediately, and edits never change
+    # another shop's policy files or the shared starter corpus.
+    policy_dir = tenant_policy_dir(tenant_id)
+    policy_dir.mkdir(parents=True, exist_ok=True)
+    if POLICY_SOURCE_DIR.is_dir():
+        for source in POLICY_SOURCE_DIR.glob("*.md"):
+            target = policy_dir / source.name
+            if not target.exists():
+                shutil.copyfile(source, target)
     return destination

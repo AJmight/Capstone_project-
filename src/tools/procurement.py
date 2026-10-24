@@ -55,6 +55,7 @@ Version: 1.2.0 (MVP: get_inventory, query_purchase_history)
 # ---------------------------------------------------------------------------
 import csv                                    # read the CSV files row by row
 import math                                   # math.ceil() for "round UP"
+import os                                    # allow Render to mount persistent app data
 import uuid                                   # random suffix so draft IDs are unique
 from datetime import datetime, timezone       # timestamps for draft IDs and records
 from fractions import Fraction                # exact arithmetic (no 0.1 + 0.2 float surprises)
@@ -68,11 +69,11 @@ from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 # ---------------------------------------------------------------------------
 # Folder with the three CSVs. Tests replace this with a temporary folder
 # (procurement.DATA_DIR = ...) to simulate missing or broken data.
-DATA_DIR = Path("data")
+DATA_DIR = Path(os.environ.get("SME_DATA_DIR", "data"))
 
 # Where draft requisitions are written: the scoped SQLite store (storage.SQLiteStorage).
 # Git-ignored: drafts are runtime records. approvals.py reads the same file (F-26).
-STORAGE_PATH = Path("data/state.sqlite3")
+STORAGE_PATH = DATA_DIR / "state.sqlite3"
 # Legacy JSON folder used before Week 6. Nothing reads or writes it any more; it is kept
 # only so older tests that sandbox it still import cleanly.
 DRAFTS_DIR = Path("data/drafts")
