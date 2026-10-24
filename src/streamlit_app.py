@@ -1,5 +1,5 @@
 """
-SME Procurement Assistant - web UI (Streamlit), Screen 1: Home / Welcome.
+SME Procurement Assistant - tenant-scoped Streamlit web prototype.
 ========================================================================
 
 WHY THIS FILE EXISTS
@@ -15,16 +15,13 @@ figure on the screen comes from a function that already exists and is tested.
   "N drafts awaiting approval"    approvals.list_drafts()   (SQLite store, since F-26)
   "Your name" + Get Started       replaces app.py's ask("Your name") at start-up
 
-The five feature cards are the five menu options of app.py (MENU). Each will become its
-own screen, one at a time (Ask, Restock, Policy, Review & approve, Stock). This first
-screen makes NO model call, so it needs no GEMINI_API_KEY and spends no quota.
+The four Stitch workspaces are Dashboard (AI copilot), Operations, Restock AI and
+Approvals. Business records and policy files are always read with the selected tenant.
 
 LOOK AND FEEL
 -------------
-Layout and colours follow docs/ui-mockup.png (a style reference): a navy hero panel on
-the left, a white panel with feature cards and a full-width "Get Started" button on the
-right. The mockup's language picker is left out on purpose: we have no translations, and
-a control that does nothing would mislead the user.
+The local Stitch exports are the UI reference: warm paper canvas, crisp stock-ledger
+cards, teal operations, violet AI actions, meaningful icons and restrained motion.
 
 HOW STREAMLIT WORKS (for the viva)
 ----------------------------------
@@ -37,7 +34,7 @@ Usage (PowerShell, from the repo root, venv active - the data paths are relative
 Then open http://localhost:8501
 
 Owner: Boonabaana Bronia (UI), built with Claude Code; backend by the whole team
-Version: 0.1.0 (Screen 1: Home / Welcome)
+Version: 1.1.0 (tenant-aware prototype screens)
 """
 
 # ---------------------------------------------------------------------------
@@ -82,124 +79,126 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# The five things the system can do = the five menu options of src/app.py.
-# (icon, title, one-line description). Kept as data so Screen 1 and the tests
-# use the same list, and later screens can reuse it for navigation.
+# The four Stitch bottom-navigation destinations; the active shop's AI copilot
+# is the Dashboard screen, matching the exported screen and the intended flow.
 # ---------------------------------------------------------------------------
-FEATURES = [
-    ("📊", "Dashboard", "See this business's stock alerts and recent activity."),
-    ("📦", "Operations", "Add items, record sales and log supplier purchases."),
-    ("✨", "Restock AI", "Build a budget-aware reorder draft from this shop's stock."),
-    ("💬", "AI Copilot", "Ask about this shop's records and its editable policies."),
-    ("✓", "Approvals", "Review, edit and record human decisions on reorder drafts."),
-]
+WORKSPACE_PAGES = ["Dashboard", "Operations", "Restock AI", "Approvals"]
+NAV_ICONS = {"Dashboard": "▦", "Operations": "▤", "Restock AI": "✧", "Approvals": "✓"}
+
+# Inline SVG keeps icons sharp and available even when Google Fonts/CDNs are offline.
+ICON_PATHS = {
+    "store": '<path d="M3 10h18l-2-6H5l-2 6Z"/><path d="M5 10v10h14V10M9 20v-6h6v6"/><path d="M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/>',
+    "sparkles": '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14ZM5 3l.7 1.7L7.5 5.5l-1.8.8L5 8l-.7-1.7-1.8-.8 1.8-.8L5 3Z"/>',
+    "inventory": '<path d="M4 7h16M4 12h16M4 17h16"/><path d="M7 4v3m5-3v3m5-3v3M7 12v5m5-5v5m5-5v5"/>',
+    "receipt": '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+    "restock": '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.5-2L20 12M4 12l2.9 5a7 7 0 0 0 11.5-2"/>',
+    "check": '<path d="M12 3 20 6v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-3Z"/><path d="m8.5 12 2.3 2.3 4.8-5"/>',
+    "policy": '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/>',
+}
+
+
+def _icon_svg(name: str, size: int = 22) -> str:
+    """Return a small fixed-path icon (never user-provided markup)."""
+    path = ICON_PATHS.get(name, ICON_PATHS["sparkles"])
+    return (f'<svg class="ui-icon" width="{size}" height="{size}" viewBox="0 0 24 24" '
+            f'aria-hidden="true" focusable="false">{path}</svg>')
+
+
+def _page_header(icon: str, title: str, subtitle: str, eyebrow: str = "YOUR BUSINESS") -> None:
+    """Render a recognizable icon-led title instead of an unstyled text heading."""
+    st.markdown(
+        f'<div class="page-heading"><div class="page-icon {"ai" if icon == "sparkles" else ""}">'
+        f'{_icon_svg(icon)}</div><div><div class="eyebrow">{html.escape(eyebrow)}</div>'
+        f'<h1>{html.escape(title)}</h1><p>{html.escape(subtitle)}</p></div></div>',
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------------------------------------------------------
-# Styling. Streamlit has no built-in "hero panel" or "feature card", so we draw
-# them with HTML + CSS (st.markdown(..., unsafe_allow_html=True)). Only text we
-# wrote ourselves (never the user's input) is put in this HTML, so a name like
-# "<script>" cannot inject markup; the user's name is only shown via st.success.
-# Colours: navy #1B2A5B and orange #F5A100, as in the mockup.
+# Stitch's exported HTML cannot run as a data-backed app by itself, so its
+# ledger palette, card rhythm and page layouts are recreated with Streamlit.
 # ---------------------------------------------------------------------------
 CSS = """
 <style>
-  /* Hide Streamlit's own top bar and footer so the page looks like an app, not a notebook. */
-  header[data-testid="stHeader"], footer { visibility: hidden; height: 0; }
-  .block-container { padding-top: 1.2rem; padding-bottom: 6rem; max-width: 1280px; }
-  /* Stitch screens use a persistent four-item mobile navigation bar. */
-  .st-key-workspace_nav div[data-testid="stRadio"] {
-    position: fixed; z-index: 1000; left: 0; right: 0; bottom: 0;
-    background: #fcf9f8; border-top: 1px solid #bdc9c6;
-    padding: 0.35rem max(0.75rem, env(safe-area-inset-right)) calc(0.35rem + env(safe-area-inset-bottom));
-  }
-  .st-key-workspace_nav div[data-testid="stRadio"] > label { display: none; }
-  .st-key-workspace_nav div[data-testid="stRadio"] > div { display: flex; justify-content: space-around; gap: 0.25rem; }
-  .st-key-workspace_nav div[data-testid="stRadio"] label { min-height: 44px; justify-content: center; }
-
-  /* ---- Left: the navy hero panel ---- */
-  .hero {
-    position: relative; overflow: hidden;
-    background: #005c55; color: #FFFFFF;
-    border-radius: 4px; padding: 44px 48px; min-height: 86vh;
-  }
-  .brand { display: flex; align-items: center; gap: 14px; }
-  .brand-badge {
-    width: 56px; height: 56px; border-radius: 4px; background: #7C3AED;
-    display: flex; align-items: center; justify-content: center; font-size: 28px;
-  }
-  .brand-name { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
-  .brand-tag  { font-size: 0.95rem; color: #D6DCF0; }
-  .kicker {
-    margin-top: 22vh; color: #a3faef; font-weight: 700;
-    letter-spacing: 0.32em; font-size: 0.85rem;
-  }
-  .headline { font-size: 3.4rem; font-weight: 800; line-height: 1.12; margin: 18px 0 22px 0; }
-  .subline  { font-size: 1.15rem; color: #D6DCF0; max-width: 34rem; position: relative; z-index: 1; }
-  /* Decorative shapes from the mockup: a ring with a dot, and a circle in the corner. */
-  .ring {
-    position: absolute; top: 120px; right: -90px; width: 300px; height: 300px;
-    border-radius: 50%; border: 56px solid rgba(255, 255, 255, 0.10);
-  }
-  .dot {
-    position: absolute; top: 190px; right: 150px; width: 22px; height: 22px;
-    border-radius: 50%; background: #7C3AED; box-shadow: 0 0 0 12px rgba(124, 58, 237, 0.18);
-  }
-  .corner {
-    position: absolute; bottom: -140px; left: -120px; width: 340px; height: 340px;
-    border-radius: 50%; background: #0f766e;
-  }
-
-  /* ---- Right: welcome text, feature cards, status strip ---- */
-  .welcome { color: #005c55; font-weight: 700; margin-top: 8px; }
-  .title   { color: #1c1b1b; font-size: 2.6rem; font-weight: 800; line-height: 1.15; margin: 6px 0 10px 0; }
-  .intro   { color: #5B6478; font-size: 1.05rem; margin-bottom: 18px; }
-  .card {
-    display: flex; gap: 16px; align-items: center;
-    background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 4px;
-    padding: 14px 18px; margin-bottom: 10px;
-  }
-  .card-icon {
-    min-width: 46px; height: 46px; border-radius: 4px; background: #EDE9FE;
-    display: flex; align-items: center; justify-content: center; font-size: 22px;
-  }
-  .card-title { color: #1c1b1b; font-weight: 700; font-size: 1.05rem; }
-  .card-text  { color: #5B6478; font-size: 0.93rem; }
-  .status {
-    background: #E6F4F2; border: 1px solid #bdc9c6; color: #00504a;
-    border-radius: 4px; padding: 10px 16px; margin: 6px 0 14px 0; font-size: 0.95rem;
-  }
-  .status b { color: #005c55; }
-
-  /* Make the primary button (Get Started) large and navy, like the mockup. */
-  .stButton > button[kind="primary"] { height: 3.4rem; border-radius: 4px; background: #005c55; }
-  /* Streamlit puts the button label inside a <p>, so the font is set on that element. */
-  .stButton > button[kind="primary"] p { font-size: 1.15rem; font-weight: 700; }
-  /* Stitch ledger system: warm canvas, teal actions, crisp borders, no card shadows. */
-  :root { color-scheme: light; }
-  [data-testid="stAppViewContainer"], [data-testid="stHeader"] { background: #fcf9f8; }
-  .block-container { max-width: 1280px; padding: 1rem 1rem 7rem; }
-  h1, h2, h3 { color: #1c1b1b; letter-spacing: -0.02em; }
-  p, label, [data-testid="stMarkdownContainer"] { color: #3e4947; }
-  [data-testid="stMetric"] { background: #fff; border: 1px solid #e5e7eb; padding: 1rem; border-radius: 4px; }
-  [data-testid="stMetricLabel"] { color: #3e4947; }
-  [data-testid="stMetricValue"] { color: #005c55; font-family: 'JetBrains Mono', monospace; }
-  [data-testid="stDataFrame"], [data-testid="stTable"] { border: 1px solid #e5e7eb; border-radius: 4px; }
-  .stButton > button, .stFormSubmitButton > button { min-height: 44px; border-radius: 4px; border-color: #bdc9c6; }
-  .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"],
-  button[data-testid="stBaseButton-primary"] { background: #0f766e !important; border-color: #0f766e !important; color: #fff !important; }
-  button[kind="primary"] *, button[data-testid*="primary"] * { color: #fff !important; }
-  .workspace-banner { background: #fff; border: 1px solid #bdc9c6; border-left: 5px solid #005c55; padding: 1rem 1.25rem; margin: .25rem 0 1.25rem; }
-  .workspace-kicker { color: #005c55; font-weight: 700; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; }
-  .workspace-title { color: #1c1b1b; font-size: 1.55rem; font-weight: 700; margin-top: .2rem; }
-  .workspace-meta { color: #6b7280; font-family: 'JetBrains Mono', monospace; font-size: .78rem; }
-  .ledger-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: 1rem; margin: .5rem 0; }
-  .tag-ai { color: #712ae2; background: #eaddff; border-radius: 4px; padding: .15rem .45rem; font-size: .8rem; }
-  .st-key-workspace_nav div[data-testid="stRadio"] { background: #fcf9f8; border-top: 1px solid #bdc9c6; }
-  .st-key-workspace_nav div[data-testid="stRadio"] label { min-height: 44px; justify-content: center; }
-  @media (min-width: 900px) {
-    .block-container { padding: 1.5rem 2rem 6rem; }
-    .st-key-workspace_nav div[data-testid="stRadio"] { left: max(calc((100vw - 1280px) / 2), 0px); right: max(calc((100vw - 1280px) / 2), 0px); }
-  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+  :root { color-scheme: light; --canvas:#fcf9f8; --paper:#fff; --soft:#f6f3f2; --ink:#1c1b1b; --muted:#52605d; --line:#d8e0de; --teal:#0f766e; --teal-dark:#005c55; --teal-soft:#e5f4f1; --violet:#712ae2; --violet-soft:#f0e9ff; --amber:#b45309; --amber-soft:#fff4d6; --red:#b42318; --red-soft:#fee9e7; }
+  html, body, [data-testid="stAppViewContainer"] { background:var(--canvas); color:var(--ink); font-family:Inter,Arial,sans-serif; }
+  header[data-testid="stHeader"], footer { visibility:hidden; height:0; }
+  .block-container { max-width:1280px; padding:1.5rem 1.25rem 7rem; }
+  h1,h2,h3 { color:var(--ink); letter-spacing:-.025em; }
+  p, label, [data-testid="stMarkdownContainer"] { color:var(--muted); }
+  .workspace-banner { display:flex; gap:.9rem; align-items:center; background:var(--paper); border:1px solid var(--line); border-left:5px solid var(--teal-dark); padding:.9rem 1.1rem; margin:.2rem 0 1.2rem; animation:rise-in .35s ease-out both; }
+  .brand-mark,.page-icon { display:grid; place-items:center; width:46px; height:46px; flex:0 0 46px; color:var(--teal-dark); background:var(--teal-soft); border:1px solid #c4e6df; border-radius:4px; font-size:23px; }
+  .workspace-kicker,.eyebrow { color:var(--teal-dark); font-weight:700; font-size:.75rem; letter-spacing:.1em; text-transform:uppercase; }
+  .workspace-title { color:var(--ink); font-size:1.3rem; font-weight:700; line-height:1.2; margin-top:.15rem; }
+  .workspace-meta { color:#66736f; font:500 .72rem 'JetBrains Mono',monospace; margin-top:.2rem; }
+  .page-heading { display:flex; align-items:center; gap:.8rem; margin:.5rem 0 1rem; animation:rise-in .38s ease-out both; }
+  .page-heading h1 { font-size:1.75rem; line-height:1.16; margin:.1rem 0; }
+  .page-heading p { margin:0; font-size:.95rem; }
+  .page-icon.ai { color:var(--violet); background:var(--violet-soft); border-color:#dfd1ff; }
+  .page-icon.warning { color:var(--amber); background:var(--amber-soft); border-color:#f5dd9e; }
+  .page-icon.success { color:var(--teal-dark); background:var(--teal-soft); }
+  .ui-icon { width:24px; height:24px; display:block; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .welcome-hero { display:flex; align-items:flex-start; gap:1rem; padding:1.4rem; background:#e8f3f1; border:1px solid #cbded9; border-left:5px solid var(--teal-dark); margin:.7rem 0 1rem; animation:rise-in .4s ease-out both; }
+  .welcome-hero h1 { margin:.15rem 0 .35rem; font-size:clamp(1.6rem,3vw,2.1rem); }
+  .welcome-hero p { max-width:48rem; margin:0; font-size:1rem; line-height:1.55; }
+  .feature-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; margin:.8rem 0 1rem; }
+  .feature-tile { display:flex; gap:.65rem; align-items:center; min-height:72px; padding:.75rem; background:var(--paper); border:1px solid var(--line); border-radius:4px; transition:transform .18s ease,border-color .18s ease,background .18s ease; }
+  .feature-tile:hover { transform:translateY(-2px); border-color:#9fcac2; background:#fbfffe; }
+  .feature-icon { display:grid; place-items:center; width:38px; height:38px; flex:0 0 38px; color:var(--teal-dark); background:var(--teal-soft); border-radius:4px; }
+  .feature-title { color:var(--ink); font-weight:650; font-size:.9rem; }
+  .feature-copy { color:var(--muted); font-size:.79rem; line-height:1.35; }
+  [data-testid="stMetric"] { background:var(--paper); border:1px solid var(--line); border-top:3px solid var(--teal); padding:.85rem 1rem; border-radius:4px; animation:rise-in .36s ease-out both; }
+  [data-testid="stMetricLabel"] { color:var(--muted); font-size:.82rem; }
+  [data-testid="stMetricValue"] { color:var(--teal-dark); font:700 1.55rem 'JetBrains Mono',monospace; }
+  [data-testid="stDataFrame"],[data-testid="stTable"] { background:var(--paper); border:1px solid var(--line); border-radius:4px; }
+  .ledger-card { background:var(--paper); border:1px solid var(--line); border-left:3px solid var(--teal); border-radius:4px; padding:.85rem 1rem; margin:.45rem 0; animation:rise-in .3s ease-out both; }
+  .assistant-panel { background:var(--paper); border:1px solid #d9cdf5; border-top:3px solid var(--violet); padding:1rem 1.1rem; border-radius:4px; }
+  .assistant-brand,.section-heading { display:flex; align-items:center; gap:.75rem; }
+  .assistant-brand { align-items:flex-start; }
+  .assistant-brand h2,.section-heading h2 { color:var(--ink); font-size:1.1rem; margin:.35rem 0 .2rem; }
+  .assistant-brand p,.section-heading p { margin:0; line-height:1.45; font-size:.9rem; }
+  .assistant-avatar { display:grid; place-items:center; width:42px; height:42px; flex:0 0 42px; color:var(--violet); background:var(--violet-soft); border:1px solid #dfd1ff; border-radius:4px; }
+  .section-heading { margin:.8rem 0 .55rem; }
+  .section-heading .feature-icon { width:40px; height:40px; flex-basis:40px; }
+  .section-heading h2 { margin:.1rem 0 .15rem; }
+  .stock-item-row { display:flex; align-items:center; gap:.8rem; }
+  .stock-item-icon { display:grid; place-items:center; width:38px; height:38px; flex:0 0 38px; color:var(--teal-dark); background:var(--teal-soft); border-radius:4px; }
+  .stock-item-info { display:flex; flex:1 1 auto; min-width:0; flex-direction:column; }
+  .stock-item-info strong { color:var(--ink); font-size:.95rem; }
+  .stock-quantity { display:flex; flex-direction:column; min-width:70px; color:var(--red); font:700 1.15rem 'JetBrains Mono',monospace; }
+  .stock-quantity span,.stock-threshold { color:var(--muted); font:500 .75rem Inter,Arial,sans-serif; }
+  .stock-threshold { min-width:100px; }
+  .stock-badge { color:var(--amber); background:var(--amber-soft); border:1px solid #f0db9c; border-radius:4px; padding:.28rem .45rem; font-size:.68rem; letter-spacing:.04em; font-weight:700; }
+  .empty-ledger { display:flex; flex-direction:column; align-items:center; text-align:center; gap:.35rem; padding:1.1rem; margin:.45rem 0 1rem; background:var(--paper); border:1px dashed #bdc9c6; border-radius:4px; }
+  .empty-ledger strong { color:var(--ink); }
+  .empty-ledger span { color:var(--muted); font-size:.87rem; }
+  .empty-ledger-icon { display:grid; place-items:center; width:44px; height:44px; margin-bottom:.2rem; color:var(--teal-dark); background:var(--teal-soft); border-radius:4px; }
+  .response-card { display:flex; align-items:center; gap:.45rem; color:var(--violet); padding:.6rem .75rem; border:1px solid #dfd1ff; border-left:3px solid var(--violet); background:#faf8ff; }
+  .response-label { display:flex; align-items:center; gap:.4rem; font-size:.75rem; letter-spacing:.07em; font-weight:700; }
+  .st-key-dashboard_metrics [data-testid="stHorizontalBlock"] { gap:.6rem; }
+  .tag-ai { color:var(--violet); background:var(--violet-soft); border:1px solid #dfd1ff; border-radius:4px; padding:.2rem .5rem; font-size:.78rem; font-weight:650; }
+  .stButton > button,.stFormSubmitButton > button { min-height:44px; border:1px solid #bdc9c6; border-radius:4px; font-weight:600; transition:transform .15s ease,background .15s ease,border-color .15s ease; }
+  .stButton > button:hover,.stFormSubmitButton > button:hover { transform:translateY(-1px); border-color:var(--teal); }
+  .stButton > button[kind="primary"],.stFormSubmitButton > button[kind="primary"],button[data-testid="stBaseButton-primary"] { background:var(--teal); border-color:var(--teal); color:white; }
+  button[kind="primary"] *,button[data-testid*="primary"] * { color:white !important; }
+  .st-key-ai_submit button[kind="primary"],.st-key-ai_submit button[data-testid*="primary"] { background:var(--violet); border-color:var(--violet); }
+  input,textarea,[data-baseweb="select"] > div { background:var(--paper) !important; border-color:var(--line) !important; border-radius:4px !important; }
+  [data-testid="stTabs"] button { min-height:44px; font-weight:600; }
+  [data-testid="stAlert"] { border-radius:4px; border-left:4px solid var(--teal); }
+  .st-key-workspace_nav [data-testid="stRadio"] { position:fixed; z-index:1000; left:0; right:0; bottom:0; margin:0; padding:.35rem max(.75rem,env(safe-area-inset-right)) calc(.35rem + env(safe-area-inset-bottom)); background:rgba(252,249,248,.98); border-top:1px solid var(--line); }
+  .st-key-workspace_nav [data-testid="stRadio"] > label { display:none; }
+  .st-key-workspace_nav [role="radiogroup"] { display:flex; justify-content:center; gap:.45rem; }
+  .st-key-workspace_nav [role="radiogroup"] label > div:first-child { display:none; }
+  .st-key-workspace_nav [role="radiogroup"] label { min-height:46px; justify-content:center; padding:.3rem .8rem; border:1px solid transparent; border-radius:4px; color:#52605d; transition:background .16s ease,color .16s ease,border-color .16s ease; }
+  .st-key-workspace_nav [role="radiogroup"] label:hover { background:var(--soft); }
+  .st-key-workspace_nav [role="radiogroup"] label:has(input:checked) { color:var(--teal-dark); font-weight:700; background:var(--teal-soft); border-color:#b9ddd6; }
+  .st-key-workspace_nav [role="radiogroup"] label:has(input:checked) p { color:var(--teal-dark); }
+  @keyframes rise-in { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes soft-pulse { 50% { opacity:.45; } }
+  .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#16a34a; margin-right:.35rem; animation:soft-pulse 1.8s ease-in-out infinite; }
+  @media (min-width:900px) { .block-container { padding:1.5rem 2rem 6rem; } .st-key-workspace_nav [data-testid="stRadio"] { left:max(calc((100vw - 1280px) / 2),0px); right:max(calc((100vw - 1280px) / 2),0px); } }
+  @media (max-width:640px) { .block-container { padding:.8rem .75rem 6rem; } .feature-strip { grid-template-columns:1fr; } .workspace-title { font-size:1.1rem; } .page-heading h1 { font-size:1.45rem; } .st-key-workspace_nav [role="radiogroup"] { gap:.08rem; } .st-key-workspace_nav [role="radiogroup"] label { min-height:50px; padding:.2rem .22rem; font-size:.75rem; } .stock-threshold { display:none; } .stock-item-row { gap:.45rem; } .st-key-dashboard_metrics [data-testid="stHorizontalBlock"] { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; } }
 </style>
 """
 
@@ -239,10 +238,18 @@ def render_home() -> None:
     if "tenant_id" in st.session_state:
         render_business_home()
         return
-    st.markdown('<div class="workspace-banner"><div class="workspace-kicker">SME PROCUREMENT ASSISTANT</div>'
-                '<div class="workspace-title">Your shop, your stock book.</div>'
-                '<div>Enter a business name to open its separate inventory, purchase and reorder records.</div></div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="welcome-hero"><div class="page-icon success">{_icon_svg("store", 27)}</div>'
+        '<div><div class="workspace-kicker">SME PROCUREMENT WORKSPACE</div>'
+        '<h1>Your shop, your stock book.</h1>'
+        '<p>Track stock, sales, supplier purchases and reorder decisions in a clear digital ledger. '
+        'Each business opens its own private workspace.</p></div></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="feature-strip">'
+        f'<div class="feature-tile"><div class="feature-icon">{_icon_svg("inventory", 20)}</div><div><div class="feature-title">Stock & counter sales</div><div class="feature-copy">Add products and record daily movements.</div></div></div>'
+        f'<div class="feature-tile"><div class="feature-icon">{_icon_svg("restock", 20)}</div><div><div class="feature-title">Plan a restock</div><div class="feature-copy">Use your own records and budget.</div></div></div>'
+        f'<div class="feature-tile"><div class="feature-icon">{_icon_svg("check", 20)}</div><div><div class="feature-title">You stay in control</div><div class="feature-copy">A person reviews every reorder draft.</div></div></div>'
+        '</div>', unsafe_allow_html=True)
     with st.form("open_business_workspace"):
         business = st.text_input("Business name", key="business_name_input", max_chars=80,
                                  placeholder="e.g. Aminah's Stationery")
@@ -264,76 +271,78 @@ def render_home() -> None:
 
 
 def render_business_home() -> None:
-    """Show persistent workspace navigation and route every feature to this tenant."""
+    """Show the four Stitch workspaces and route every action through one tenant."""
     tenant_id = st.session_state["tenant_id"]
     business_name = st.session_state["business_name"]
     with st.container(key="workspace_nav"):
-        page = st.radio("Workspace", ["Dashboard", "Operations", "Restock AI", "AI Copilot", "Approvals"],
+        page = st.radio("Workspace", WORKSPACE_PAGES, format_func=lambda item: f"{NAV_ICONS[item]}  {item}",
                         horizontal=True, label_visibility="collapsed", key="workspace_page")
     safe_name = html.escape(business_name)
-    st.markdown(f'<div class="workspace-banner"><div class="workspace-kicker">ACTIVE BUSINESS WORKSPACE</div>'
-                f'<div class="workspace-title">{safe_name}</div>'
-                f'<div class="workspace-meta">TENANT · {html.escape(tenant_id)}</div></div>',
-                unsafe_allow_html=True)
+    header, switch = st.columns([6, 1])
+    with header:
+        st.markdown(f'<div class="workspace-banner"><div class="brand-mark">{_icon_svg("store")}</div>'
+                    f'<div><div class="workspace-kicker"><span class="live-dot"></span>ACTIVE BUSINESS WORKSPACE</div>'
+                    f'<div class="workspace-title">{safe_name}</div>'
+                    f'<div class="workspace-meta">TENANT · {html.escape(tenant_id)}</div></div></div>',
+                    unsafe_allow_html=True)
+    with switch:
+        st.button("↔ Switch shop", key="switch_business", help="Open another business ledger",
+                  on_click=_switch_business)
     if page == "Restock AI":
         render_restock_page(tenant_id, business_name)
     elif page == "Operations":
         render_operations_page(tenant_id)
-    elif page == "AI Copilot":
-        render_copilot_page(tenant_id, business_name)
     elif page == "Approvals":
         render_approvals_page(tenant_id, business_name)
     else:
         render_dashboard(tenant_id, business_name)
-    if st.button("Switch business workspace", type="secondary", key="switch_business"):
-        st.session_state.pop("tenant_id", None)
-        st.session_state.pop("business_name", None)
-        st.session_state.pop("workspace_page", None)
-        st.rerun()
+
+
+def _switch_business() -> None:
+    """Clear this browser's selected shop before Streamlit creates its nav widget."""
+    for key in ("tenant_id", "business_name", "workspace_page"):
+        st.session_state.pop(key, None)
 
 
 def render_dashboard(tenant_id: str, business_name: str) -> None:
-    """Show the active shop's ledger summary and clear paths into each workflow."""
-    safe_business_name = html.escape(business_name)
-    st.markdown(f'<div class="workspace-title">Morning, {safe_business_name}</div>'
-                '<div class="intro">Your business ledger is ready. Add your own stock and supplier quotes to get started.</div>',
-                unsafe_allow_html=True)
+    """Make the Copilot the dashboard, with the shop's real work one tap away."""
+    _page_header("sparkles", "AI Copilot", f"Good day, {business_name}. Ask about this shop's stock, suppliers, purchases or policies.", "DASHBOARD · BUSINESS ASSISTANT")
     status = shop_status(tenant_id)
     if "error" in status:
         st.warning(f"Business records could not be read: {status['error']}")
     else:
         sales = _read_tenant_rows(tenant_id, "sales.csv")[1]
         today_sales = [row for row in sales if row.get("date") == date.today().isoformat()]
-        drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
-        metrics = st.columns(4)
-        metrics[0].metric("Products", status["total"])
-        metrics[1].metric("Below reorder point", status["low"])
-        metrics[2].metric("Sales today", len(today_sales))
-        metrics[3].metric("Drafts to review", status["waiting"] if status["waiting"] is not None else "—")
-    st.subheader("Today's Restock Assessment")
+        with st.container(key="dashboard_metrics"):
+            metrics = st.columns(4)
+            metrics[0].metric("📦 Products", status["total"])
+            metrics[1].metric("⚠️ Need restock", status["low"])
+            metrics[2].metric("🧾 Sales today", len(today_sales))
+            metrics[3].metric("✅ Drafts awaiting you", status["waiting"] if status["waiting"] is not None else "—")
+    st.markdown('<div class="section-heading"><div class="feature-icon">'
+                f'{_icon_svg("restock", 20)}</div><div><h2>Today\'s restock assessment</h2>'
+                '<p>Items at or below this shop\'s reorder point.</p></div></div>', unsafe_allow_html=True)
     low = procurement.get_low_stock(tenant_id=tenant_id)
     if "error" in low:
         st.warning(low["error"])
     elif low["items"]:
-        low_frame = pd.DataFrame([{"Item": item["item_name"], "SKU": item["item_id"],
-                                   "In stock": item["current_stock"],
-                                   "Reorder point": item["reorder_point"]} for item in low["items"]])
-        st.dataframe(low_frame, width="stretch", hide_index=True)
+        for item in low["items"][:4]:
+            st.markdown(
+                '<div class="ledger-card stock-item-row">'
+                f'<div class="stock-item-icon">{_icon_svg("inventory", 19)}</div>'
+                f'<div class="stock-item-info"><strong>{html.escape(str(item["item_name"]))}</strong>'
+                f'<span class="workspace-meta">{html.escape(str(item["item_id"]))}</span></div>'
+                f'<div class="stock-quantity"><strong>{item["current_stock"]}</strong><span>in stock</span></div>'
+                f'<div class="stock-threshold">Reorder at <b>{item["reorder_point"]}</b></div>'
+                '<span class="stock-badge">LOW STOCK</span></div>', unsafe_allow_html=True)
+        if len(low["items"]) > 4:
+            st.caption(f"And {len(low['items']) - 4} more low-stock items · see the full ledger in Operations.")
     else:
-        st.info("No products yet. Add this shop's items in Operations → Stock to start recording sales and reorders.")
-    st.subheader("Quick actions")
-    actions = st.columns(3)
-    if actions[0].button("＋ Add or edit stock", width="stretch", key="dash_stock"):
-        st.session_state["workspace_page"] = "Operations"
-        st.rerun()
-    if actions[1].button("✨ Plan a restock", width="stretch", key="dash_restock"):
-        st.session_state["workspace_page"] = "Restock AI"
-        st.rerun()
-    if actions[2].button("📘 Ask this shop's policy", width="stretch", key="dash_policy"):
-        st.session_state["workspace_page"] = "AI Copilot"
-        st.session_state["copilot_tab"] = "Policy Q&A"
-        st.rerun()
-    st.caption("Every view, stock change, sale, supplier receipt and reorder draft uses the tenant ID shown above.")
+        st.markdown('<div class="empty-ledger"><div class="empty-ledger-icon">'
+                    f'{_icon_svg("inventory", 26)}</div><strong>This stock ledger is ready for your items.</strong>'
+                    '<span>Add products in Operations and the assistant will use this shop\'s records.</span></div>',
+                    unsafe_allow_html=True)
+    render_copilot_page(tenant_id, business_name)
 
 
 def _run_business_question(question: str, tenant_id: str, business_name: str) -> None:
@@ -349,8 +358,7 @@ def _run_business_question(question: str, tenant_id: str, business_name: str) ->
 
 def render_operations_page(tenant_id: str) -> None:
     """Record stock, counter sales, supplier quotes and received purchases."""
-    st.subheader("Operations Stock")
-    st.caption("Changes made here are saved only inside the active business ledger.")
+    _page_header("inventory", "Operations", "Keep this shop's inventory, counter sales and supplier activity together.", "BUSINESS LEDGER")
     inventory = procurement.get_inventory(tenant_id=tenant_id)
     low = procurement.get_low_stock(tenant_id=tenant_id)
     sales_rows = _read_tenant_rows(tenant_id, "sales.csv")[1]
@@ -359,7 +367,7 @@ def render_operations_page(tenant_id: str) -> None:
     summaries[1].metric("Below threshold", low.get("count", 0))
     summaries[2].metric("Sales recorded", len(sales_rows))
     stock_tab, sale_tab, purchase_tab, quote_tab, activity_tab = st.tabs(
-        ["Stock", "Sales", "Purchases", "Supplier quotes", "Activity"])
+        ["📦 Stock", "🧾 Sales", "📥 Purchases", "🏷️ Supplier quotes", "↻ Activity"])
     with stock_tab:
         render_stock_page(tenant_id)
     with sale_tab:
@@ -413,11 +421,27 @@ def _next_item_id(rows: list[dict]) -> str:
 
 def render_ask_page(tenant_id: str, business_name: str) -> None:
     """Run the existing bounded procurement agent in the active tenant context."""
-    st.subheader("Ask the assistant")
-    st.caption("The assistant can read this business's stock, quotes and purchase history. It cannot approve or place orders.")
-    with st.form("ask_business"):
-        question = st.text_area("What would you like to know?", placeholder="Which items are low on stock?")
-        submitted = st.form_submit_button("Ask assistant", type="primary")
+    st.markdown('<div class="assistant-panel"><div class="assistant-brand">'
+                f'<div class="assistant-avatar">{_icon_svg("sparkles", 21)}</div>'
+                '<div><span class="tag-ai">AI COPILOT</span><h2>How can I help your shop?</h2>'
+                '<p>Answers use this business\'s saved stock, supplier quotes and purchase history. '
+                'A person still approves every reorder.</p></div></div></div>', unsafe_allow_html=True)
+    question_key = f"assistant_question_{tenant_id}"
+    prompts = [
+        ("⚠️  Which items are low on stock?", "Which items are low on stock?"),
+        ("✧  Plan restock under UGX 300,000", "Plan a restock under UGX 300,000"),
+        ("⇄  Compare supplier pen prices", "Compare supplier prices for pens"),
+        ("▤  What did we buy last month?", "What did we buy last month?"),
+    ]
+    prompt_cols = st.columns(2)
+    for index, (label, prompt) in enumerate(prompts):
+        prompt_cols[index % 2].button(label, key=f"assistant_prompt_{tenant_id}_{index}", width="stretch",
+                                      on_click=_select_assistant_prompt, args=(prompt, question_key))
+    with st.form(f"ask_business_{tenant_id}"):
+        question = st.text_area("Ask about your business", key=question_key,
+                                placeholder="Ask about stock, suppliers, purchases or policies…", height=100)
+        with st.container(key="ai_submit"):
+            submitted = st.form_submit_button("✧  Ask Copilot", type="primary", width="stretch")
     if submitted:
         if not question.strip():
             st.warning("Enter a question first.")
@@ -427,21 +451,27 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
                     result = run_agent(question.strip(), user_name=business_name,
                                        tenant_id=tenant_id)
                     status.update(label="Response ready", state="complete", expanded=False)
-                st.write(result.get("final_text", "The assistant returned no response."))
-                st.caption(f"Run {result.get('run_id', 'n/a')} · {result.get('latency_s', 0)} seconds")
+                st.markdown('<div class="response-card"><div class="response-label">'
+                            f'{_icon_svg("sparkles", 16)} COPILOT RESPONSE</div></div>', unsafe_allow_html=True)
+                st.markdown(result.get("final_text", "The assistant returned no response."))
+                st.caption(f"Run {result.get('run_id', 'n/a')} · {result.get('latency_s', 0)} seconds · tenant-scoped")
             except Exception as exc:
                 st.error(f"The assistant could not complete this request: {type(exc).__name__}: {exc}")
 
 
+def _select_assistant_prompt(prompt: str, input_key: str) -> None:
+    """Put a suggestion into the chat input before that widget is instantiated."""
+    st.session_state[input_key] = prompt
+
+
 def render_restock_page(tenant_id: str, business_name: str) -> None:
     """Build and save a tenant-scoped reorder draft for human review."""
-    st.subheader("Restock Planner")
-    st.caption("Uses only this business's stock, purchase history and saved supplier quotes.")
-    with st.form("restock_business"):
+    _page_header("restock", "Restock AI", "Build a budget-aware draft from this shop's own stock, prices and purchase history.", "AI-ASSISTED · HUMAN-APPROVED")
+    with st.form(f"restock_business_{tenant_id}"):
         budget = st.number_input("Procurement cash budget (UGX)", min_value=1,
                                  step=10000, value=300000)
         choice = st.radio("Planning method", ["AI restock planner", "Create a deterministic draft"],
-                          horizontal=True, key="restock_method")
+                          horizontal=True, key=f"restock_method_{tenant_id}")
         submitted = st.form_submit_button("Run restock planner", type="primary", width="stretch")
     if not submitted:
         return
@@ -509,11 +539,14 @@ def _create_deterministic_draft(budget: int, tenant_id: str, business_name: str)
 
 def render_stock_page(tenant_id: str) -> None:
     """Add, update or remove items in this business's own inventory ledger."""
-    st.subheader("Stock editor")
+    st.markdown('<div class="section-heading"><div class="feature-icon">'
+                f'{_icon_svg("inventory", 20)}</div><div><h2>Stock editor</h2>'
+                '<p>Change quantities, reorder points or cost; every edit stays in this shop.</p></div></div>',
+                unsafe_allow_html=True)
     headers, rows = _read_tenant_rows(tenant_id, "current_stock.csv")
     st.caption(f"{len(rows)} products in this business. Add new items here; edit or remove rows in the ledger, then save.")
     with st.expander("＋ Add stock item", expanded=not rows):
-        with st.form("add_stock_item"):
+        with st.form(f"add_stock_item_{tenant_id}"):
             item_name = st.text_input("Product name", placeholder="e.g. Exercise books")
             category = st.text_input("Category", placeholder="e.g. Stationery")
             values = st.columns(3)
@@ -547,17 +580,17 @@ def render_stock_page(tenant_id: str) -> None:
                 title_cols[1].warning("Below threshold")
             else:
                 title_cols[1].success("In stock")
-            with st.form(f"edit_stock_item_{index}"):
-                name = st.text_input("Product name", row["item_name"], key=f"stock_name_{index}")
-                category = st.text_input("Category", row["category"], key=f"stock_category_{index}")
+            with st.form(f"edit_stock_item_{tenant_id}_{index}"):
+                name = st.text_input("Product name", row["item_name"], key=f"stock_name_{tenant_id}_{index}")
+                category = st.text_input("Category", row["category"], key=f"stock_category_{tenant_id}_{index}")
                 values = st.columns(3)
                 stock = values[0].number_input("Current stock", min_value=0, value=current,
-                                               step=1, key=f"stock_current_{index}")
+                                               step=1, key=f"stock_current_{tenant_id}_{index}")
                 threshold = values[1].number_input("Reorder point", min_value=0, value=reorder,
-                                                   step=1, key=f"stock_reorder_{index}")
+                                                   step=1, key=f"stock_reorder_{tenant_id}_{index}")
                 cost = values[2].number_input("Unit cost (UGX)", min_value=0,
                                               value=int(row.get("unit_cost_ugx") or 0), step=100,
-                                              key=f"stock_cost_{index}")
+                                              key=f"stock_cost_{tenant_id}_{index}")
                 actions = st.columns([1, 1, 3])
                 save_item = actions[0].form_submit_button("Save item", type="primary")
                 delete_item = actions[1].form_submit_button("Delete item")
@@ -580,13 +613,16 @@ def render_stock_page(tenant_id: str) -> None:
 
 def render_purchase_page(tenant_id: str) -> None:
     """Record a purchase in this business's history and increase its stock."""
-    st.subheader("Record a purchase")
+    st.markdown('<div class="section-heading"><div class="feature-icon">'
+                f'{_icon_svg("receipt", 20)}</div><div><h2>Record a purchase</h2>'
+                '<p>Log goods received and update this shop\'s stock at the same time.</p></div></div>',
+                unsafe_allow_html=True)
     stock_headers, stock_rows = _read_tenant_rows(tenant_id, "current_stock.csv")
     if not stock_rows:
         st.info("Add stock items in Stock before recording a purchase.")
         return
     item_by_id = {row["item_id"]: row for row in stock_rows}
-    with st.form("purchase_entry"):
+    with st.form(f"purchase_entry_{tenant_id}"):
         item_id = st.selectbox("Item", list(item_by_id), format_func=lambda key: item_by_id[key]["item_name"])
         qty = st.number_input("Quantity received", min_value=1, step=1)
         price = st.number_input("Unit price (UGX)", min_value=0, step=100)
@@ -611,13 +647,16 @@ def render_purchase_page(tenant_id: str) -> None:
 
 def render_sale_page(tenant_id: str) -> None:
     """Record a counter sale in this business and reduce its stock count."""
-    st.subheader("Record a sale")
+    st.markdown('<div class="section-heading"><div class="feature-icon">'
+                f'{_icon_svg("receipt", 20)}</div><div><h2>Record a sale</h2>'
+                '<p>Record what left the shelf; the stock balance is updated automatically.</p></div></div>',
+                unsafe_allow_html=True)
     stock_headers, stock_rows = _read_tenant_rows(tenant_id, "current_stock.csv")
     available = {row["item_id"]: row for row in stock_rows}
     if not available:
         st.info("Add stock items before recording a sale.")
         return
-    with st.form("sale_entry"):
+    with st.form(f"sale_entry_{tenant_id}"):
         item_id = st.selectbox("Item sold", list(available),
                                format_func=lambda key: available[key]["item_name"])
         qty = st.number_input("Quantity sold", min_value=1, step=1)
@@ -645,13 +684,13 @@ def render_sale_page(tenant_id: str) -> None:
 
 def render_quote_page(tenant_id: str) -> None:
     """Record supplier quotes so restock calculations use this shop's price book."""
-    st.subheader("Supplier price book")
+    _page_header("policy", "Supplier quotes", "Keep this shop's prices and lead times ready for the next reorder.", "SUPPLIER LEDGER")
     _, stock_rows = _read_tenant_rows(tenant_id, "current_stock.csv")
     if not stock_rows:
         st.info("Add products in Stock before saving supplier quotes.")
         return
     names = {row["item_id"]: row["item_name"] for row in stock_rows}
-    with st.form("supplier_quote_entry"):
+    with st.form(f"supplier_quote_entry_{tenant_id}"):
         item_id = st.selectbox("Product", list(names), format_func=lambda key: names[key])
         supplier = st.text_input("Supplier name")
         fields = st.columns(3)
@@ -674,7 +713,7 @@ def render_quote_page(tenant_id: str) -> None:
 
 def render_activity_page(tenant_id: str) -> None:
     """Show this business's purchases, sales and reorder decisions together."""
-    st.subheader("Business activity ledger")
+    _page_header("receipt", "Business activity", "A running record of stock movements and reorder decisions.", "AUDIT HISTORY")
     purchases = _read_tenant_rows(tenant_id, "past_purchases.csv")[1]
     sales = _read_tenant_rows(tenant_id, "sales.csv")[1]
     drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
@@ -696,16 +735,18 @@ def render_activity_page(tenant_id: str) -> None:
 
 
 def render_copilot_page(tenant_id: str, business_name: str) -> None:
-    """Answer shop-specific questions and let the shop edit its own policy copies."""
-    st.subheader("AI Copilot")
-    st.caption("Answers use this business's saved stock, purchases, quotes and policy documents.")
-    tabs = st.tabs(["Ask the assistant", "Policy Q&A", "View & edit policies"])
+    """Keep business questions and the shop's editable policies inside Dashboard."""
+    tabs = st.tabs(["💬 Ask Copilot", "📘 Policy Q&A", "📄 View & edit policies"])
     with tabs[0]:
         render_ask_page(tenant_id, business_name)
     with tabs[1]:
-        st.markdown("#### Ask this shop's policy")
-        with st.form("tenant_policy_question"):
-            question = st.text_input("Policy question", placeholder="What approvals are needed for a large order?")
+        st.markdown('<div class="section-heading"><div class="feature-icon">'
+                    f'{_icon_svg("policy", 20)}</div><div><h2>Ask this shop\'s policy</h2>'
+                    '<p>Get an answer grounded in this business\'s saved policy documents.</p></div></div>',
+                    unsafe_allow_html=True)
+        with st.form(f"tenant_policy_question_{tenant_id}"):
+            question = st.text_input("Policy question", key=f"policy_question_{tenant_id}",
+                                     placeholder="What approvals are needed for a large order?")
             submitted = st.form_submit_button("Ask policy", type="primary")
         if submitted:
             if not question.strip():
@@ -732,12 +773,13 @@ def render_policy_editor(tenant_id: str) -> None:
     st.markdown("#### Policies for this business")
     st.caption("Each business gets its own starter policy copies; edits do not affect other shops.")
     if documents:
-        selected = st.selectbox("Policy document", [path.name for path in documents], key="policy_document")
+        selected = st.selectbox("Policy document", [path.name for path in documents],
+                                key=f"policy_document_{tenant_id}")
         selected_path = policy_dir / selected
         policy_text = selected_path.read_text(encoding="utf-8")
-        with st.form("edit_tenant_policy"):
+        with st.form(f"edit_tenant_policy_{tenant_id}"):
             edited = st.text_area("Policy text (Markdown)", value=policy_text,
-                                  height=360, key=f"policy_text_{selected}")
+                                  height=360, key=f"policy_text_{tenant_id}_{selected}")
             saved = st.form_submit_button("Save this business's policy", type="primary")
         if saved:
             if not edited.strip():
@@ -748,7 +790,7 @@ def render_policy_editor(tenant_id: str) -> None:
                 st.success("Policy updated for this business. The next question will use this version.")
                 st.rerun()
     with st.expander("Add a business-specific policy"):
-        with st.form("new_tenant_policy"):
+        with st.form(f"new_tenant_policy_{tenant_id}"):
             title = st.text_input("Policy title", placeholder="e.g. Credit sales policy")
             body = st.text_area("Policy details", height=160)
             add_policy = st.form_submit_button("Add policy")
@@ -769,8 +811,7 @@ def render_policy_editor(tenant_id: str) -> None:
 
 def render_approvals_page(tenant_id: str, business_name: str) -> None:
     """Let a human review, edit and decide this shop's recorded reorder drafts."""
-    st.subheader("Human Approvals")
-    st.caption("Reorder drafts stay attached to this tenant. The assistant cannot approve or place orders.")
+    _page_header("check", "Approvals", "Review the AI's draft, adjust quantities and record a human decision.", "OWNER / MANAGER REVIEW")
     drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     waiting = [draft for draft in drafts if draft["status"] == procurement.DRAFT_STATUS]
     if not waiting:
@@ -788,7 +829,7 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
         st.write(f"{line['item_name']} · {line['recommended_qty']} units · UGX {line['total_cost_ugx']:,}")
     st.metric("Draft total", f"UGX {draft['estimated_budget_ugx']:,}")
     with st.expander("Adjust a suggested quantity"):
-        with st.form("edit_reorder_quantity"):
+        with st.form(f"edit_reorder_quantity_{tenant_id}"):
             line_id = st.selectbox("Item", [line["item_id"] for line in draft["lines"]],
                                    format_func=lambda key: next(line["item_name"] for line in draft["lines"] if line["item_id"] == key))
             new_qty = st.number_input("New quantity", min_value=0, step=1)
@@ -802,7 +843,7 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
                 st.rerun()
             except Exception as exc:
                 st.error(str(exc))
-    with st.form("approval_decision"):
+    with st.form(f"approval_decision_{tenant_id}"):
         decision = st.selectbox("Decision", ["APPROVED", "REJECTED"])
         reason = st.text_input("Reason (required for rejection or an override)")
         confirmation = st.text_input(f"Type {decision} to confirm")

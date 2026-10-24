@@ -100,19 +100,22 @@ py src\generate_synthetic_data.py # regenerate the CSVs (seed 42)
 
 Install the document tools once with `pip install -r requirements-docs.txt`.
 
-## Web UI (Streamlit) — in progress
+## Web UI (Streamlit)
 
-The browser version of `src\app.py`. It calls the same functions as the console menu and
-adds no business logic. Screen 1 (Home / Welcome, styled after `docs/ui-mockup.png`) is
-done; the other screens follow one at a time.
+The browser prototype starts with a business name (no login screen) and opens a separate
+tenant workspace. Dashboard is the AI Copilot; Operations manages stock, sales, purchases,
+supplier quotes and activity; Restock AI drafts a plan; Approvals records the human decision.
+Policy Q&A and policy editing are available from the Copilot. The Stitch-inspired screens
+share a warm paper canvas, teal operations, violet AI accents, inline icons and restrained
+motion. Each business has its own records and policy directory.
 
 ```powershell
 pip install -r requirements.txt               # includes streamlit
 py -m streamlit run src\streamlit_app.py      # run from the repo root; opens http://localhost:8501
-py tests\test_ui_home.py                      # 5 offline UI tests (headless, no API key)
+py tests\test_ui_home.py                      # headless UI and tenant-isolation checks
 ```
 
-The home screen makes no model call, so it works without `GEMINI_API_KEY`.
+The welcome screen and data-entry flows work without `GEMINI_API_KEY`; AI answers require it.
 
 ## Repository layout
 

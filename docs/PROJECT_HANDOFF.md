@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-20 (evening — Weeks 1–8 complete, release `v1.0.0` cut; **left to do: the slide deck, the demo screenshots, the MUELE upload and the contribution rows**). AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
+**Last updated:** 2026-10-24 — Streamlit prototype now has tenant workspaces and Stitch-inspired screens. AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -156,7 +156,7 @@ Changes made in the release pass (all with re-tests):
 - Week 1 documents exist only as `.docx`; `docs/requirements/` should hold the charter, user stories and AI Boundary Matrix.
 - User stories mention sugar/dairy/cooking oil sales; the data is stationery purchases. Align stories with data.
 - **No CI yet** (DO-2 open): the seven offline suites are only run by hand, so nothing catches a regression on push.
-- **No web UI**: the release is the console app (`py src\app.py`). AP-2/AP-3 stay optional.
+- **Streamlit prototype:** `src/streamlit_app.py` starts with a business name (no login). Dashboard is AI Copilot; Operations, Restock AI and Approvals follow the local Stitch exports. Stock, sales, purchases, quotes, policies, drafts and widget keys are scoped to the active tenant. Run with `py -m streamlit run src\streamlit_app.py`; headless UI checks live in `tests/test_ui_home.py`.
 - The contribution rows in `docs/weekly-reports/week*-report.md` are still `[name]` placeholders (PR-3 open).
 - `evidence/final/screenshots/` is empty — the demo screenshots are still to be captured (AP-4 open).
 

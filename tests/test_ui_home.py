@@ -46,7 +46,7 @@ from rag import index as policy_index
 from tools.knowledge import search_policy
 
 APP = ROOT / "src" / "streamlit_app.py"
-EXPECTED_ROUTES = ["Dashboard", "Operations", "Restock AI", "AI Copilot", "Approvals"]
+EXPECTED_ROUTES = ["Dashboard", "Operations", "Restock AI", "Approvals"]
 
 
 def expected_low_and_total() -> tuple[int, int]:
@@ -117,6 +117,15 @@ def test_ui06_workspace_routes_render():
     for page in EXPECTED_ROUTES:
         at.radio(key="workspace_page").set_value(page).run()
         assert not at.exception, f"{page}: {at.exception}"
+    at.radio(key="workspace_page").set_value("Dashboard").run()
+    assert "AI Copilot" in page_text(at), "Dashboard should open the shop's AI Copilot view"
+    next(button for button in at.button if "Which items are low on stock?" in button.label).click().run()
+    assert not at.exception, at.exception
+    tenant_id = tenant_context.business_tenant_id("UI Route Shop")
+    assert at.session_state[f"assistant_question_{tenant_id}"] == "Which items are low on stock?"
+    next(button for button in at.button if button.label == "↔ Switch shop").click().run()
+    assert not at.exception, at.exception
+    assert "tenant_id" not in at.session_state
 
 
 def test_ui08_stock_item_can_be_added_from_the_ui():
@@ -138,8 +147,9 @@ def test_ui08_stock_item_can_be_added_from_the_ui():
     assert saved == [{"item_id": "ITM001", "item_name": "Blue exercise book", "category": "Stationery",
                       "current_stock": "5", "reorder_point": "8", "unit_cost_ugx": "1200"}]
     # The visible stock cards must also support editing and removal from this ledger.
-    next(item for item in at.text_input if item.key == "stock_name_0").input("Blue exercise books")
-    next(item for item in at.number_input if item.key == "stock_current_0").set_value(7)
+    tenant_id = tenant_context.business_tenant_id("UI Stock Entry Shop")
+    next(item for item in at.text_input if item.key == f"stock_name_{tenant_id}_0").input("Blue exercise books")
+    next(item for item in at.number_input if item.key == f"stock_current_{tenant_id}_0").set_value(7)
     next(button for button in at.form_submit_button if button.label == "Save item").click().run()
     with stock_file.open(encoding="utf-8", newline="") as source:
         saved = list(csv.DictReader(source))
