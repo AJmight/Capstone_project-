@@ -67,6 +67,8 @@ from tool_agent import run_agent
 from restock_agent import run_restock
 from rag import index as policy_index
 from rag.policy_qa import answer_policy_question
+from conversation_context import (COPILOT_RECENT_TURNS, COPILOT_SUMMARY_LIMIT,
+                                  build_copilot_context, compact_copilot_turn)
 
 # ---------------------------------------------------------------------------
 # Page set-up: must be the first Streamlit call in the script
@@ -274,6 +276,12 @@ def render_business_home() -> None:
     """Show the four Stitch workspaces and route every action through one tenant."""
     tenant_id = st.session_state["tenant_id"]
     business_name = st.session_state["business_name"]
+    # Callbacks and page actions queue navigation here. Apply it BEFORE st.radio
+    # is created; mutating a widget's state later in the same run raises a
+    # StreamlitWidgetAlreadyInstantiatedError.
+    next_page = st.session_state.pop("_next_workspace_page", None)
+    if next_page in WORKSPACE_PAGES:
+        st.session_state["workspace_page"] = next_page
     with st.container(key="workspace_nav"):
         page = st.radio("Workspace", WORKSPACE_PAGES, format_func=lambda item: f"{NAV_ICONS[item]}  {item}",
                         horizontal=True, label_visibility="collapsed", key="workspace_page")
@@ -300,7 +308,8 @@ def render_business_home() -> None:
 
 def _switch_business() -> None:
     """Clear this browser's selected shop before Streamlit creates its nav widget."""
-    for key in ("tenant_id", "business_name", "workspace_page"):
+    for key in ("tenant_id", "business_name", "business_name_input", "workspace_page",
+                "_next_workspace_page"):
         st.session_state.pop(key, None)
 
 
@@ -420,13 +429,30 @@ def _next_item_id(rows: list[dict]) -> str:
 
 
 def render_ask_page(tenant_id: str, business_name: str) -> None:
-    """Run the existing bounded procurement agent in the active tenant context."""
+    """Run a tenant-scoped chat with compact, bounded context between questions."""
     st.markdown('<div class="assistant-panel"><div class="assistant-brand">'
                 f'<div class="assistant-avatar">{_icon_svg("sparkles", 21)}</div>'
                 '<div><span class="tag-ai">AI COPILOT</span><h2>How can I help your shop?</h2>'
                 '<p>Answers use this business\'s saved stock, supplier quotes and purchase history. '
                 'A person still approves every reorder.</p></div></div></div>', unsafe_allow_html=True)
     question_key = f"assistant_question_{tenant_id}"
+    history_key = f"copilot_history_{tenant_id}"
+    summary_key = f"copilot_summary_{tenant_id}"
+    history = st.session_state.get(history_key, [])
+    summary = st.session_state.get(summary_key, "")
+    if summary:
+        with st.expander("Earlier conversation · compacted context"):
+            st.caption(summary)
+    for turn in history:
+        with st.chat_message("user"):
+            st.write(turn["question"])
+        with st.chat_message("assistant"):
+            st.write(turn["answer"])
+            if turn.get("latency_s") is not None:
+                st.caption(f"{turn.get('latency_s')} s · source-aware · tenant-scoped")
+    if history or summary:
+        st.button("Clear conversation", key=f"clear_conversation_{tenant_id}",
+                  on_click=_clear_copilot_context, args=(tenant_id,))
     prompts = [
         ("⚠️  Which items are low on stock?", "Which items are low on stock?"),
         ("✧  Plan restock under UGX 300,000", "Plan a restock under UGX 300,000"),
@@ -448,12 +474,15 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
         else:
             try:
                 with st.status("Checking this business's records…", expanded=True) as status:
-                    result = run_agent(question.strip(), user_name=business_name,
+                    contextual_question = _copilot_context(summary, history, question.strip())
+                    result = run_agent(contextual_question, user_name=business_name,
                                        tenant_id=tenant_id)
                     status.update(label="Response ready", state="complete", expanded=False)
+                answer = result.get("final_text", "The assistant returned no response.")
+                _save_copilot_turn(tenant_id, question.strip(), answer, result.get("latency_s"))
                 st.markdown('<div class="response-card"><div class="response-label">'
                             f'{_icon_svg("sparkles", 16)} COPILOT RESPONSE</div></div>', unsafe_allow_html=True)
-                st.markdown(result.get("final_text", "The assistant returned no response."))
+                st.markdown(answer)
                 st.caption(f"Run {result.get('run_id', 'n/a')} · {result.get('latency_s', 0)} seconds · tenant-scoped")
             except Exception as exc:
                 st.error(f"The assistant could not complete this request: {type(exc).__name__}: {exc}")
@@ -464,15 +493,39 @@ def _select_assistant_prompt(prompt: str, input_key: str) -> None:
     st.session_state[input_key] = prompt
 
 
+def _copilot_context(summary: str, history: list[dict], question: str) -> str:
+    """Build a small, tenant-local prompt with only compact history and recent turns."""
+    return build_copilot_context(summary, history, question)
+
+
+def _save_copilot_turn(tenant_id: str, question: str, answer: str,
+                       latency_s: float | None = None) -> None:
+    """Keep four recent turns and compact older exchanges without another model call."""
+    history_key = f"copilot_history_{tenant_id}"
+    summary_key = f"copilot_summary_{tenant_id}"
+    history = list(st.session_state.get(history_key, []))
+    summary = st.session_state.get(summary_key, "")
+    summary, history = compact_copilot_turn(summary, history, question, answer, latency_s)
+    st.session_state[history_key] = history
+    st.session_state[summary_key] = summary.strip()
+
+
+def _clear_copilot_context(tenant_id: str) -> None:
+    """Clear only the active business's conversational context before rerender."""
+    st.session_state.pop(f"copilot_history_{tenant_id}", None)
+    st.session_state.pop(f"copilot_summary_{tenant_id}", None)
+    st.session_state.pop(f"assistant_question_{tenant_id}", None)
+
+
 def render_restock_page(tenant_id: str, business_name: str) -> None:
     """Build and save a tenant-scoped reorder draft for human review."""
     _page_header("restock", "Restock AI", "Build a budget-aware draft from this shop's own stock, prices and purchase history.", "AI-ASSISTED · HUMAN-APPROVED")
     with st.form(f"restock_business_{tenant_id}"):
         budget = st.number_input("Procurement cash budget (UGX)", min_value=1,
-                                 step=10000, value=300000)
-        choice = st.radio("Planning method", ["AI restock planner", "Create a deterministic draft"],
+                                 step=10000, value=300000, key=f"restock_budget_{tenant_id}")
+        choice = st.radio("Planning method", ["Quick deterministic plan", "AI agent plan (slower)"],
                           horizontal=True, key=f"restock_method_{tenant_id}")
-        submitted = st.form_submit_button("Run restock planner", type="primary", width="stretch")
+        submitted = st.form_submit_button("Build restock draft", type="primary", width="stretch")
     if not submitted:
         return
     inventory = procurement.get_inventory(tenant_id=tenant_id)
@@ -480,7 +533,7 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
         st.info("Add this shop's stock items in Operations → Stock before planning a reorder.")
         return
     try:
-        if choice == "AI restock planner":
+        if choice == "AI agent plan (slower)":
             with st.status("Reviewing this business's stock…", expanded=True) as status:
                 result = run_restock(int(budget), user_name=business_name,
                                      shop_id=tenant_id, tenant_id=tenant_id)
@@ -506,6 +559,12 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
         if created:
             st.success(f"Draft {created[0]} is saved to this business's approvals queue.")
             st.info("This is a draft only. Review it under Approvals before making any purchase.")
+            st.session_state[f"restock_handoff_{tenant_id}"] = {
+                "draft_id": created[0], "timeline": state.get("timeline", []),
+                "plan": plan, "sources": ["current_stock.csv", "past_purchases.csv", "supplier_quotes.csv"],
+            }
+            st.session_state["_next_workspace_page"] = "Approvals"
+            st.rerun()
     except Exception as exc:
         st.error(f"Restock planning failed: {type(exc).__name__}: {exc}")
 
@@ -513,6 +572,7 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
 def _create_deterministic_draft(budget: int, tenant_id: str, business_name: str) -> dict:
     """Save an offline-ready quote-based draft when no model call is available."""
     from tools import registry
+    from state import StateManager, WorkflowStage
 
     context = {"created_by": business_name, "tenant_id": tenant_id, "user_id": "default-user"}
     low, status = registry.execute_tool("get_low_stock", {}, context=context)
@@ -527,14 +587,52 @@ def _create_deterministic_draft(budget: int, tenant_id: str, business_name: str)
     if not plan["included"]:
         return {"outcome": "NEEDS_HUMAN", "state": {"plan": plan},
                 "final_text": "No priced reorder fits this budget. Add supplier quotes or purchase history first."}
-    draft, status = registry.execute_tool("draft_requisition", {
-        "items": [row["item_id"] for row in plan["included"]]}, context=context)
-    if status != "ok":
-        raise ValueError(draft.get("error", "Could not save the reorder draft."))
-    if int(draft["estimated_budget_ugx"]) > budget:
-        raise ValueError("The calculated draft exceeded the budget; it was not submitted for approval.")
+    if int(plan["planned_total_ugx"]) > budget:
+        raise ValueError("The planned total exceeded this shop's budget; no draft was saved.")
+
+    # Create a real workflow session so the Approval screen can enforce this
+    # budget and the state machine can record the eventual human decision.
+    state_mgr = StateManager()
+    try:
+        session = state_mgr.create_session(shop_id=tenant_id, user_name=business_name,
+                                           budget_ugx=budget)
+        state_mgr.transition_to(session.session_id, WorkflowStage.SENSING_INVENTORY,
+                                "Checking this business's low stock")
+        state_mgr.update_session(session.session_id, low_stock_count=len(low["items"]))
+        state_mgr.transition_to(session.session_id, WorkflowStage.PLANNING_RESTOCK,
+                                "Building a deterministic budget plan")
+        state_mgr.transition_to(session.session_id, WorkflowStage.DRAFTING_ORDER,
+                                "Saving a tenant-scoped draft")
+        draft, status = registry.execute_tool("draft_requisition", {
+            "items": [row["item_id"] for row in plan["included"]]}, context=context)
+        if status != "ok":
+            raise ValueError(draft.get("error", "Could not save the reorder draft."))
+        if int(draft["estimated_budget_ugx"]) > budget:
+            raise ValueError("The saved estimate exceeded the budget; check the plan and draft calculation.")
+        state_mgr.update_session(session.session_id, draft_id=draft["draft_id"],
+                                 draft_total_ugx=draft["estimated_budget_ugx"],
+                                 approval_status="AWAITING_APPROVAL")
+        state_mgr.transition_to(session.session_id, WorkflowStage.AWAITING_APPROVAL,
+                                "Waiting for a human review")
+    except Exception:
+        try:
+            if "session" in locals():
+                state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED,
+                                        "Restock draft failed")
+        except Exception:
+            pass
+        raise
+    finally:
+        state_mgr.close()
+    timeline = [
+        {"phase": "SENSE", "detail": f"Read {low['count']} low-stock items", "source": "current_stock.csv"},
+        {"phase": "PLAN", "detail": f"Included {len(plan['included'])} item(s); deferred {len(plan['deferred'])}",
+         "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv"},
+        {"phase": "DRAFT", "detail": f"Saved {draft['draft_id']} for human review", "source": "tenant-scoped approvals ledger"},
+    ]
     return {"outcome": "DRAFT_READY", "final_text": "A quote-based draft is ready for human review.",
-            "state": {"plan": plan, "drafts_created": [draft["draft_id"]]}}
+            "state": {"plan": plan, "drafts_created": [draft["draft_id"]], "timeline": timeline,
+                      "session_id": session.session_id}}
 
 
 def render_stock_page(tenant_id: str) -> None:
@@ -547,12 +645,12 @@ def render_stock_page(tenant_id: str) -> None:
     st.caption(f"{len(rows)} products in this business. Add new items here; edit or remove rows in the ledger, then save.")
     with st.expander("＋ Add stock item", expanded=not rows):
         with st.form(f"add_stock_item_{tenant_id}"):
-            item_name = st.text_input("Product name", placeholder="e.g. Exercise books")
-            category = st.text_input("Category", placeholder="e.g. Stationery")
+            item_name = st.text_input("Product name", placeholder="e.g. Exercise books", key=f"new_stock_name_{tenant_id}")
+            category = st.text_input("Category", placeholder="e.g. Stationery", key=f"new_stock_category_{tenant_id}")
             values = st.columns(3)
-            current = values[0].number_input("Current stock", min_value=0, step=1)
-            reorder = values[1].number_input("Reorder point", min_value=0, step=1)
-            unit_cost = values[2].number_input("Unit cost (UGX)", min_value=0, step=100)
+            current = values[0].number_input("Current stock", min_value=0, step=1, key=f"new_stock_current_{tenant_id}")
+            reorder = values[1].number_input("Reorder point", min_value=0, step=1, key=f"new_stock_reorder_{tenant_id}")
+            unit_cost = values[2].number_input("Unit cost (UGX)", min_value=0, step=100, key=f"new_stock_cost_{tenant_id}")
             st.caption(f"Next item ID: {_next_item_id(rows)}")
             add_item = st.form_submit_button("Add item to this business", type="primary")
         if add_item:
@@ -623,12 +721,12 @@ def render_purchase_page(tenant_id: str) -> None:
         return
     item_by_id = {row["item_id"]: row for row in stock_rows}
     with st.form(f"purchase_entry_{tenant_id}"):
-        item_id = st.selectbox("Item", list(item_by_id), format_func=lambda key: item_by_id[key]["item_name"])
-        qty = st.number_input("Quantity received", min_value=1, step=1)
-        price = st.number_input("Unit price (UGX)", min_value=0, step=100)
-        supplier = st.text_input("Supplier")
-        payment = st.selectbox("Payment status", ["Paid Cash / MoMo", "On Supplier Credit", "Partial Paid"])
-        purchased_on = st.date_input("Purchase date", value=date.today())
+        item_id = st.selectbox("Item", list(item_by_id), format_func=lambda key: item_by_id[key]["item_name"], key=f"purchase_item_{tenant_id}")
+        qty = st.number_input("Quantity received", min_value=1, step=1, key=f"purchase_qty_{tenant_id}")
+        price = st.number_input("Unit price (UGX)", min_value=0, step=100, key=f"purchase_price_{tenant_id}")
+        supplier = st.text_input("Supplier", key=f"purchase_supplier_{tenant_id}")
+        payment = st.selectbox("Payment status", ["Paid Cash / MoMo", "On Supplier Credit", "Partial Paid"], key=f"purchase_payment_{tenant_id}")
+        purchased_on = st.date_input("Purchase date", value=date.today(), key=f"purchase_date_{tenant_id}")
         submitted = st.form_submit_button("Save purchase", type="primary")
     if submitted:
         try:
@@ -658,11 +756,11 @@ def render_sale_page(tenant_id: str) -> None:
         return
     with st.form(f"sale_entry_{tenant_id}"):
         item_id = st.selectbox("Item sold", list(available),
-                               format_func=lambda key: available[key]["item_name"])
-        qty = st.number_input("Quantity sold", min_value=1, step=1)
-        price = st.number_input("Unit sale price (UGX)", min_value=0, step=100)
-        payment = st.selectbox("Payment method", ["Cash", "MTN MoMo", "Airtel Money"])
-        sold_on = st.date_input("Sale date", value=date.today())
+                               format_func=lambda key: available[key]["item_name"], key=f"sale_item_{tenant_id}")
+        qty = st.number_input("Quantity sold", min_value=1, step=1, key=f"sale_qty_{tenant_id}")
+        price = st.number_input("Unit sale price (UGX)", min_value=0, step=100, key=f"sale_price_{tenant_id}")
+        payment = st.selectbox("Payment method", ["Cash", "MTN MoMo", "Airtel Money"], key=f"sale_payment_{tenant_id}")
+        sold_on = st.date_input("Sale date", value=date.today(), key=f"sale_date_{tenant_id}")
         submitted = st.form_submit_button("Save sale & update stock", type="primary")
     if submitted:
         try:
@@ -691,12 +789,12 @@ def render_quote_page(tenant_id: str) -> None:
         return
     names = {row["item_id"]: row["item_name"] for row in stock_rows}
     with st.form(f"supplier_quote_entry_{tenant_id}"):
-        item_id = st.selectbox("Product", list(names), format_func=lambda key: names[key])
-        supplier = st.text_input("Supplier name")
+        item_id = st.selectbox("Product", list(names), format_func=lambda key: names[key], key=f"quote_item_{tenant_id}")
+        supplier = st.text_input("Supplier name", key=f"quote_supplier_{tenant_id}")
         fields = st.columns(3)
-        price = fields[0].number_input("Unit price (UGX)", min_value=1, step=100)
-        minimum = fields[1].number_input("Minimum order quantity", min_value=1, step=1)
-        lead = fields[2].number_input("Lead time (days)", min_value=0, step=1)
+        price = fields[0].number_input("Unit price (UGX)", min_value=1, step=100, key=f"quote_price_{tenant_id}")
+        minimum = fields[1].number_input("Minimum order quantity", min_value=1, step=1, key=f"quote_minimum_{tenant_id}")
+        lead = fields[2].number_input("Lead time (days)", min_value=0, step=1, key=f"quote_lead_{tenant_id}")
         submitted = st.form_submit_button("Save supplier quote", type="primary")
     if submitted:
         if not supplier.strip():
@@ -791,8 +889,8 @@ def render_policy_editor(tenant_id: str) -> None:
                 st.rerun()
     with st.expander("Add a business-specific policy"):
         with st.form(f"new_tenant_policy_{tenant_id}"):
-            title = st.text_input("Policy title", placeholder="e.g. Credit sales policy")
-            body = st.text_area("Policy details", height=160)
+            title = st.text_input("Policy title", placeholder="e.g. Credit sales policy", key=f"new_policy_title_{tenant_id}")
+            body = st.text_area("Policy details", height=160, key=f"new_policy_body_{tenant_id}")
             add_policy = st.form_submit_button("Add policy")
         if add_policy:
             if not title.strip() or not body.strip():
@@ -812,6 +910,13 @@ def render_policy_editor(tenant_id: str) -> None:
 def render_approvals_page(tenant_id: str, business_name: str) -> None:
     """Let a human review, edit and decide this shop's recorded reorder drafts."""
     _page_header("check", "Approvals", "Review the AI's draft, adjust quantities and record a human decision.", "OWNER / MANAGER REVIEW")
+    handoff = st.session_state.pop(f"restock_handoff_{tenant_id}", None)
+    if handoff:
+        st.success(f"Restock draft {handoff['draft_id']} is ready here for your review.")
+        with st.expander("Restock process & sources", expanded=True):
+            for step in handoff.get("timeline", []):
+                st.markdown(f"**{step.get('phase', 'STEP')}** · {step.get('detail', '')} · Source: {step.get('source', 'agent trace')}")
+            st.caption("Records checked: " + ", ".join(handoff.get("sources", [])))
     drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     waiting = [draft for draft in drafts if draft["status"] == procurement.DRAFT_STATUS]
     if not waiting:
@@ -831,9 +936,10 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
     with st.expander("Adjust a suggested quantity"):
         with st.form(f"edit_reorder_quantity_{tenant_id}"):
             line_id = st.selectbox("Item", [line["item_id"] for line in draft["lines"]],
+                                   key=f"approval_item_{tenant_id}",
                                    format_func=lambda key: next(line["item_name"] for line in draft["lines"] if line["item_id"] == key))
-            new_qty = st.number_input("New quantity", min_value=0, step=1)
-            edit_reason = st.text_input("Reason for changing the AI suggestion")
+            new_qty = st.number_input("New quantity", min_value=0, step=1, key=f"approval_qty_{tenant_id}")
+            edit_reason = st.text_input("Reason for changing the AI suggestion", key=f"approval_edit_reason_{tenant_id}")
             edit_submitted = st.form_submit_button("Save quantity change")
         if edit_submitted:
             try:
@@ -844,9 +950,9 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
             except Exception as exc:
                 st.error(str(exc))
     with st.form(f"approval_decision_{tenant_id}"):
-        decision = st.selectbox("Decision", ["APPROVED", "REJECTED"])
-        reason = st.text_input("Reason (required for rejection or an override)")
-        confirmation = st.text_input(f"Type {decision} to confirm")
+        decision = st.selectbox("Decision", ["APPROVED", "REJECTED"], key=f"approval_decision_{tenant_id}")
+        reason = st.text_input("Reason (required for rejection or an override)", key=f"approval_reason_{tenant_id}")
+        confirmation = st.text_input(f"Type {decision} to confirm", key=f"approval_confirmation_{tenant_id}")
         submitted = st.form_submit_button("Record human decision", type="primary")
     if submitted:
         if confirmation != decision:

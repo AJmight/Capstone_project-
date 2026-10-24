@@ -39,7 +39,7 @@ WHO DECIDES WHAT
   The human decides: approve or reject the draft (src/approvals.py), the quantities of
                   "needs_human" items, and whether to fund deferred items.
 
-LIMITS: max 5 model turns, max 6 tool calls, 3 tools only (task allow-list), the same
+LIMITS: interactive defaults allow max 3 model turns, max 6 tool calls, 3 tools only (task allow-list), the same
 call may not be repeated (one retry allowed after SERVICE_UNAVAILABLE).
 
 EVIDENCE: every run is appended to evidence/week5/restock_runs.jsonl; with --save-trace
@@ -58,6 +58,7 @@ Version: 1.3.0 (F-26: agent_checks written to the SQLite draft; no crash when bu
 # ---------------------------------------------------------------------------
 import argparse                               # command-line interface
 import json                                   # traces
+import os                                     # bounded interactive turn configuration
 from dataclasses import asdict, dataclass, field   # the explicit AgentState
 from datetime import datetime, timezone       # timestamps
 from pathlib import Path                      # file paths
@@ -74,8 +75,18 @@ from tool_agent import run_agent              # the bounded model <-> tool loop 
 GOAL = ("Prepare ONE draft restock requisition within the budget and report everything that "
         "needs a human decision.")
 CONTRACT_TOOLS = {"get_low_stock", "plan_within_budget", "draft_requisition"}   # task allow-list
-MAX_TURNS = 5             # model calls per run
-MAX_TOOL_CALLS = 6        # tool executions per run (plan, retry, draft, plus slack)
+MAX_TURNS = int(os.getenv("RESTOCK_AGENT_MAX_TURNS", "5"))          # allows one recovery plus draft verification
+MAX_TOOL_CALLS = int(os.getenv("RESTOCK_AGENT_MAX_TOOL_CALLS", "8"))  # bounded plan/retry/draft budget
+
+
+def _close_run_managers(*managers) -> None:
+    """Release per-run SQLite handles on success and failure (avoids stale sessions/locks)."""
+    for manager in managers:
+        if manager is not None:
+            try:
+                manager.close()
+            except Exception:
+                pass
 OUT_DIR = Path("evidence/week5")
 RUNS_LOG = OUT_DIR / "restock_runs.jsonl"
 
@@ -306,10 +317,14 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         if mem_prompt:
             message += f"\n\n{mem_prompt}"
 
-        run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
-                        max_tool_calls=MAX_TOOL_CALLS, on_tool_result=state.observe,
-                        trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS,
-                        tenant_id=tenant_id)
+        try:
+            run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
+                            max_tool_calls=MAX_TOOL_CALLS, on_tool_result=state.observe,
+                            trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS,
+                            tenant_id=tenant_id)
+        except Exception:
+            _close_run_managers(state_mgr, mem_mgr)
+            raise
         final_text = run["final_text"]
         if run["steps"] and not run["steps"][-1]["tool_requests"]:
             state.log("PLAN/DECIDE", f"turn {run['steps'][-1]['turn']} ({run['steps'][-1]['model']}) "
@@ -414,6 +429,7 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         (OUT_DIR / f"trace_{save_trace_as}.json").write_text(json.dumps(record, indent=2, default=str),
                                                              encoding="utf-8")
         (OUT_DIR / f"trace_{save_trace_as}.md").write_text(render_trace_md(record), encoding="utf-8")
+    _close_run_managers(state_mgr, mem_mgr)
     return record
 
 

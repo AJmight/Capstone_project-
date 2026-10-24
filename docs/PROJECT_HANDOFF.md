@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-24 — Streamlit prototype now has tenant workspaces and Stitch-inspired screens. AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
+**Last updated:** 2026-10-24 — UI workflow and session hardening, bounded copilot context, faster default restock flow. AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -153,10 +153,9 @@ Changes made in the release pass (all with re-tests):
 - F-12 (the ±10 % range could exceed the budget) — **closed** in Week 7 by `src/guardrails.py`; the ceiling is
   now enforced in code inside `src/restock_agent.py`, not only checked in the prompt.
 - v1.2.0 has not yet been evaluated on `gemini-3.8-flash` (quota exhausted during runs).
-- Week 1 documents exist only as `.docx`; `docs/requirements/` should hold the charter, user stories and AI Boundary Matrix.
-- User stories mention sugar/dairy/cooking oil sales; the data is stationery purchases. Align stories with data.
+- `docs/requirements/project-charter.md` and `user-stories.md` reflect the current no-login tenant demo and Stitch journey. Business names select workspaces, but this is not authentication.
 - **No CI yet** (DO-2 open): the seven offline suites are only run by hand, so nothing catches a regression on push.
-- **Streamlit prototype:** `src/streamlit_app.py` starts with a business name (no login). Dashboard is AI Copilot; Operations, Restock AI and Approvals follow the local Stitch exports. Stock, sales, purchases, quotes, policies, drafts and widget keys are scoped to the active tenant. Run with `py -m streamlit run src\streamlit_app.py`; headless UI checks live in `tests/test_ui_home.py`.
+- **Streamlit prototype:** `src/streamlit_app.py` starts with a business name (no login). Dashboard is AI Copilot; Operations, Restock AI and Approvals follow the local Stitch exports. Stock, sales, purchases, quotes, policies, drafts, form keys and conversation context are tenant-scoped. The quick deterministic planner creates a budget-linked workflow session and automatically opens Approvals. The optional AI agent is capped at five turns and eight tool calls (one recovery pass), while general Copilot tool runs use three turns and six calls; model calls time out after 15 seconds, try at most two models and do not repeat the chain by default. Copilot retains four recent exchanges and compacts older context locally. Run with `py -m streamlit run src\streamlit_app.py`; 15 headless workflow checks live in `tests/test_ui_home.py`.
 - The contribution rows in `docs/weekly-reports/week*-report.md` are still `[name]` placeholders (PR-3 open).
 - `evidence/final/screenshots/` is empty — the demo screenshots are still to be captured (AP-4 open).
 

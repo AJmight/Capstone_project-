@@ -16,3 +16,17 @@ services:
         value: gemini-3.8-flash
       - key: GEMINI_FALLBACK_MODELS
         sync: false
+      - key: LLM_TIMEOUT_SECONDS
+        value: "15"
+      - key: LLM_MAX_ROUNDS
+        value: 1
+      - key: LLM_MAX_MODEL_ATTEMPTS
+        value: "2"
+      - key: AGENT_MAX_TURNS
+        value: "3"
+      - key: AGENT_MAX_TOOL_CALLS
+        value: "6"
+      - key: RESTOCK_AGENT_MAX_TURNS
+        value: "5"
+      - key: RESTOCK_AGENT_MAX_TOOL_CALLS
+        value: "8"

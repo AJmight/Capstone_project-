@@ -3,7 +3,7 @@
 | Field | Value |
 |:---|:---|
 | **Course** | BSE4104 Emerging Trends in Software Engineering — 8-week AI-native & agentic capstone |
-| **Version** | 1.1 — consolidated in markdown on 2026-10-06 from the team's Week 1 document `User stories and acceptance criteria (2).docx` and the capstone brief; aligned with the system as built |
+| **Version** | 1.2 — revised 2026-10-24 to match the Stitch prototype flows, tenant workspaces and tested browser features |
 | **Prepared by** | Mwesigwa Arnold Mugahi (AI Engineering Lead); team review pending |
 
 ## 1. Problem
@@ -21,13 +21,16 @@ stock that does not sell.
 | **Shop owner / manager** | Reliable oversight; approves every purchase; protects cash flow |
 | **A trusted person appointed by the owner** | Quick, defensible answers: what is low, how much to order, from whom |
 
-In the system these are **one trusted user per shop** with no separate roles (decision-001, 2026-10-13);
-the separation that matters is **between shops** (one shop's data must never reach another).
+In the system these are **one trusted user per shop** with no separate roles (decision-001, 2026-10-13).
+The prototype starts by asking for a business name rather than showing a login; the name selects the
+shop's tenant workspace, and the app keeps its stock, activity, policies, drafts and chat context
+under that tenant. This is demo-level separation, not identity verification or production access control.
 
 ## 3. Proposal statement (brief §2 format)
 
-> Our system helps **small-shop owners and staff** complete **weekly procurement preparation** (find low
-> stock, decide quantities within a budget, choose suppliers and draft a requisition). AI is used for
+> Our system helps **small-shop owners and staff** keep a tenant-scoped digital stock book and prepare
+> **weekly procurement** (record deliveries and counter sales, find low stock, decide quantities within a
+> budget, compare supplier quotes, ask shop-policy questions and draft a requisition). AI is used for
 > **understanding requests, planning which tools to use, retrieving policy, and explaining results**.
 > Deterministic software remains responsible for **all calculations, business rules, validation,
 > permissions and limits**. The agent may use **eight approved read/draft tools** but may **not approve,
@@ -45,22 +48,26 @@ Full matrix: `docs/requirements/ai-boundary-matrix.md`.
 
 ## 5. Scope
 
-**In scope (MVP, Weeks 1–5):** stock overview; low-stock detection; supplier quote comparison; reorder
-quantity with working; purchase-history questions; policy questions with citations (RAG); draft
-requisitions; bounded weekly-restock agent within a budget; human approval with edit and audit trail;
-traces and tests.
+**In scope:** the existing tested procurement functions plus a browser prototype guided by local Stitch
+exports. The browser journey is business name → Dashboard / AI Copilot → Operations (stock, sales,
+purchases, quotes and activity) → Restock AI → Approvals. Policy Q&A/editing lives in the copilot. A
+saved restock draft opens Approvals automatically. The default restock planner is deterministic and
+fast; an optional bounded AI-agent path explains the multi-step process. Chat context is scoped to the
+selected tenant and browser session, with four recent turns and a compact extract of older turns.
 
-**Planned (Weeks 6–8):** persistent state (database), justified memory, MCP-style tool interface, 30+
-scenario evaluation, guardrail hardening, web UI, release.
+**Completed capstone layers:** persistent workflow state, justified memory, MCP-style tool interface,
+30+ scenario evaluation, guardrail hardening and release checks.
 
-**Out of scope:** real purchasing or payments; supplier APIs; real customer or business data; PDF/scanned
-quote parsing (User Story 3 — descoped, see user stories); sales/POS integration.
+**Out of scope:** real authentication/identity verification, production use of private records, real
+purchasing or payments, supplier APIs, automated sales/POS integration and PDF/scanned quote parsing.
+The browser prototype manually records sales and incoming purchases; it does not connect to a POS.
 
 ## 6. Assumptions
 
-- Purchase history is used as the demand estimate because the data has no sales records.
+- The UI records new sales and purchase history per shop. The existing demand estimator uses purchase
+  history; sales-based forecasting has not been evaluated and is not implied by recording sales.
 - One shop, one currency (UGX), three suppliers; quotes are current.
-- One trusted user per shop, identified by name at login; real authentication comes later and is the key access control.
+- One trusted user per shop. Entering a business name selects a tenant but does not authenticate the person; production authentication remains future work.
 - The Gemini free tier remains available (fallback across six Flash models).
 
 ## 7. Constraints
@@ -73,11 +80,12 @@ quote parsing (User Story 3 — descoped, see user stories); sales/POS integrati
 
 | Criterion | Target | Status (2026-10-06) |
 |:---|:---|:---|
-| Correct figures | 100 % of quantities/totals match an independent calculation | Met — offline tests (22 + 16 + 7) |
+| Correct figures | 100 % of quantities/totals match an independent calculation | Met — Week 4–8 deterministic suites |
 | Bounded autonomy | No path for the AI to approve/order/pay; every draft needs a human | Met — no such tool; L-04 refusal; approval CLI |
 | Grounded answers | Policy answers cite sources; unanswerable questions refused | Met — 15/15 RAG cases |
 | Safe failure | Tool/model failures end in recovery or a clear hand-off | Met — T3, T4, offline A-03…A-13 |
-| Evaluation | ≥ 30 scenarios by Week 7 | In progress (≈ 50 automated cases already, mixed live/offline) |
+| Evaluation | ≥ 30 scenarios by Week 7 | Met — Week 7/8 offline evaluations |
+| Browser workflow | Each shop can record data, plan a restock and review it without session errors | Met — headless app flow tests; no live business data used |
 
 ## 9. Risks
 

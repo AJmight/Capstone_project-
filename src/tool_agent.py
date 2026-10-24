@@ -81,8 +81,8 @@ from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations
 # Configuration
 # ---------------------------------------------------------------------------
 PROMPT_PATH = Path("prompts/procurement_assistant_v2.5.0.md")       # tool-mode prompt
-MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
-MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "12"))
+MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "3"))
+MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "6"))
 TRACE_PATH = Path("evidence/week4/agent_traces.jsonl")
 
 # Shown to the user when the agent has to stop without an answer (human hand-off).

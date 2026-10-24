@@ -1,24 +1,38 @@
 # User Stories and Acceptance Criteria
 
-Consolidated on 2026-10-06 from the Week 1 document `User stories and acceptance criteria (2).docx`
-(repository root). The original stories used examples such as sugar, dairy and cooking oil; our synthetic
-data is a stationery shop, so examples are aligned with the data. Status shows what the MVP implements.
+**Revised:** 2026-10-24 to match the local Stitch exports and the current browser prototype.
+The journey is: enter a business name → use Dashboard / AI Copilot → record the shop's
+operations → plan a restock → review the automatically queued draft in Approvals. There is
+no login screen. A name selects a tenant workspace; this demo has no identity verification.
 
-**Users:** the stories name a Procurement Officer and a Shop Owner/Manager; in the system these are the **same trusted user** (no roles — decision-001, 2026-10-13).
+**User:** one trusted shop owner/manager per workspace. The model may explain and prepare a
+draft, but only the person using the app can edit, approve or reject it.
 
-| # | Story | Acceptance criteria (aligned) | Status | Implemented by / evidence |
-|:---:|:---|:---|:---:|:---|
-| 1 | **Inventory viewing** — as staff, I want to view current inventory levels | AC 1.1 list all items with quantities. AC 1.2 "show inventory for Office items" shows only that category; an unknown category (e.g. "dairy") lists the real categories | ✅ (console; dashboard in Week 8) | `get_inventory`; tests M-O01, M-O02, M-01, M-06 |
-| 2 | **Low-stock flagging** | AC 2.1 items at/below reorder point are flagged. AC 2.2 "What is low?" lists them with a suggested quantity | ✅ | `get_low_stock`, `estimate_reorder_quantity`; O-01, L-01 |
-| 3 | **Quote upload & parsing** (PDF) | AC 3.1 extract item, price, total from a PDF quote. AC 3.2 unreadable format → clear error | ❌ descoped for MVP | Quotes come from `supplier_quotes.csv`; candidate for Week 6–8 if time allows |
-| 4 | **Quote comparison** | AC 4.1 compare suppliers' prices and lead times for an item. AC 4.2 best offer by lowest price (tie → faster delivery). Delivery fees are not in the data (policy docs describe them) | ✅ | `compare_supplier_quotes`; O-06, L-02 |
-| 5 | **Draft requisition** | AC 5.1 draft lists items, quantities, total. AC 5.2 unique ID, date, creator | ✅ | `draft_requisition`; O-09 |
-| 6 | **Historical query** | AC 6.1 "How many Bic Pens did we buy from March to May 2025?" returns the exact total. AC 6.2 a vague question gets a clarifying question | ✅ | `query_purchase_history`; M-O03, M-02, M-03 |
-| 7 | **Trend-based reorder estimate** | AC 7.1 based on average monthly purchases (demand proxy). AC 7.2 shows the reasoning trail | ✅ | `estimate_reorder_quantity` `basis`; O-02, L-02 |
-| 8 | **Budget range** | AC 8.1 low/high estimate (±10 %) | ✅ | `draft_requisition` `budget_range_ugx`; O-09 (note F-12) |
-| 9 | **Manual override** | AC 9.1 change a quantity before approval. AC 9.2 log the override and the original suggestion | ✅ | `approvals.py edit`; M-O06, M-O07 |
-| 10 | **Manager approval** | AC 10.1 pending drafts visible. AC 10.2 approve → "APPROVED" + audit. AC 10.3 reject needs a reason | ✅ (CLI/console) | `approvals.py`, `app.py` option 4; O-21 |
-| 11 | **Audit lineage** | AC 11.1 interactions logged with time and user. AC 11.2 agent decisions in a trace. AC 11.3 requisition changes logged | ✅ | `evidence/week4/*traces.jsonl`, `evidence/week5/`, `data/drafts/audit_log.jsonl` |
-| 12 | **Safety guardrail (200 %)** | AC 12.1 a quantity > 200 % of the largest past purchase is flagged and needs an override reason to approve | ✅ | `safety_cap`, `requires_override`; O-12, O-22, M-O07 |
+| # | Story | Acceptance criteria | Status / evidence |
+|:--:|:--|:--|:--|
+| 1 | **Open a business workspace** — as an owner, I enter my shop name and continue without login. | Blank names are refused; a stable tenant ID is shown; reopening the same name returns its ledger; a different name receives separate stock, policy, draft, sales and chat state. | ✅ App UI, `tenant_context.py`, UI tenant tests |
+| 2 | **Dashboard / AI Copilot** — as an owner, I want to see this shop's status and ask about its records from the first screen. | Dashboard shows this tenant's product, low-stock, today's sales and pending-draft counts; prompt chips fill the question; answers include run/source context; errors are shown without breaking the page. | ✅ `render_dashboard`, `render_ask_page`; mocked UI flow tests |
+| 3 | **Inventory management** — as an owner, I want to add, review, edit and remove products in my stock book. | New IDs do not collide; name/category and nonnegative values are validated; edits update only this tenant; delete removes that row; an empty shop starts with headers, not sample records. | ✅ Operations → Stock; UI flow/isolation tests |
+| 4 | **Low-stock assessment** — as an owner, I want items at or below their reorder point highlighted. | `current_stock <= reorder_point` is the sole flag rule; dashboard and Operations show the same tenant-only results. | ✅ `get_low_stock`; offline procurement and UI tests |
+| 5 | **Record incoming purchases** — as an owner, I want each delivery saved and on-hand stock increased. | Item, quantity, price, supplier, payment status and date are recorded; quantity received is positive; this tenant's stock rises by that quantity. | ✅ Operations → Purchases; UI integration test |
+| 6 | **Record counter sales** — as an owner, I want sales recorded and shelf stock reduced. | Item, quantity, price, payment method and date are recorded; stock is reduced by the sale; an attempted oversell is refused and leaves both records unchanged. | ✅ Operations → Sales; UI integration test |
+| 7 | **Keep supplier quotes** — as an owner, I want supplier prices, minimum quantities and lead times recorded for planning. | Quotes are attached to this tenant and its products; supplier is required; cheapest valid quote is used by existing procurement logic. | ✅ Operations → Supplier quotes; quote comparison offline tests |
+| 8 | **Review business activity** — as an owner, I want to see my purchases, sales and reorder decisions together. | Activity rows come from the selected tenant; drafts show status, date, line count and estimated total. | ✅ Operations → Activity; UI flow test |
+| 9 | **Plan restock within my cash budget** — as an owner, I want a fast, explainable list of what fits. | Default quick plan uses deterministic stock/history/quote calculations with no model call; budget is a hard ceiling; urgency, included/deferred items and missing information are shown with data sources. The optional AI-agent path remains bounded and has a short retry/turn budget. | ✅ Restock AI; procurement and UI workflow tests |
+| 10 | **Send the saved draft to my review queue** — as an owner, I want the next action to be clear after planning. | A successfully saved draft automatically opens Approvals; the draft is tenant-scoped, carries a workflow session and allocated budget, and is still pending a human. No draft is created when nothing is eligible or priced. | ✅ Restock → Approvals handoff; session/workflow UI test |
+| 11 | **Adjust a suggested quantity** — as an owner, I want to correct the AI's proposed quantity before deciding. | Only a pending draft can be edited; the reason and original suggestion are retained; line total and draft total are recalculated by Python; edits are audited. | ✅ Approvals; `approvals.edit_quantity`; UI integration test |
+| 12 | **Approve or reject a draft myself** — as the owner, I want to make and record the final decision. | Confirmation must match the selected decision; a rejection needs a reason; the 200% safety cap and saved budget are enforced; the state machine, draft and audit trail record the decision; AI has no decision tool. | ✅ Approvals; Week 4/6/8 tests and UI integration test |
+| 13 | **Ask and edit shop policies** — as an owner, I want cited policy answers and the ability to keep local rules current. | Q&A retrieves only the active tenant's policy corpus and shows sources; edits/additions save under that tenant and invalidate its retrieval index; other shops' answers do not include the custom document. | ✅ Dashboard → Policy Q&A / View & edit policies; tenant RAG and UI tests |
+| 14 | **Continue a copilot conversation without an unbounded prompt** — as an owner, I want follow-up questions to retain useful context. | Context is held in the current browser session and tenant key; four recent turns are retained and older turns are compacted into a 1,400-character extract without another model request; current question takes priority; Clear conversation removes that shop's chat context; switching shops never carries it across. | ✅ bounded context helper and UI session tests |
+| 15 | **Trace why a plan was made** — as an owner, I want to see the process and underlying records. | Restock shows Sense → Plan → Draft steps, its records and sources; AI runs retain tool names, stop reason, model latency and a trace; deterministic code owns all quantities and decisions. | ✅ trace modules and restock handoff details |
+| 16 | **Use the prototype safely** — as an owner, I want clear limits and recoverable failures. | AI may draft/explain but cannot order/pay/contact suppliers/approve; provider outages return a handoff; retries, model attempts, turns and tool calls are bounded; no external order is made. | ✅ registry, guardrails, offline safety suites |
+| 17 | **Upload a PDF supplier quote** — as an owner, I want to extract prices from a supplier document. | Parse product, price and totals or show a clear unreadable-file error. | ❌ Descoped from this prototype; quotes are entered manually in Operations. |
 
-**Coverage:** 11 of 12 stories implemented in the MVP; story 3 descoped with reason.
+The original Week 1 stories used sugar, dairy and cooking oil examples. The prototype and synthetic
+catalogue use stationery examples. Sales are recorded by the UI, while the existing reorder-demand
+estimator continues to use purchase history until sales-based demand is separately evaluated.
+
+**Prototype boundary:** tenant IDs separate records in storage, but entering a business name is not
+authentication. Do not enter private or production business information. On Render's free plan,
+local files can be reset when the service restarts; use persistent storage before relying on it for
+durable business records.

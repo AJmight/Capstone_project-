@@ -105,14 +105,17 @@ Install the document tools once with `pip install -r requirements-docs.txt`.
 The browser prototype starts with a business name (no login screen) and opens a separate
 tenant workspace. Dashboard is the AI Copilot; Operations manages stock, sales, purchases,
 supplier quotes and activity; Restock AI drafts a plan; Approvals records the human decision.
-Policy Q&A and policy editing are available from the Copilot. The Stitch-inspired screens
-share a warm paper canvas, teal operations, violet AI accents, inline icons and restrained
-motion. Each business has its own records and policy directory.
+The quick deterministic planner is the default; a successful draft opens Approvals and carries
+its allocated budget into the workflow session. Policy Q&A and editing are inside the Copilot.
+Copilot context is tenant-local, keeps four recent turns, and compacts older turns without an
+extra model call. AI requests use shorter timeouts, one model pass, two model attempts and at
+most three agent turns to reduce waits during provider outages. Each business has its own data.
 
 ```powershell
 pip install -r requirements.txt               # includes streamlit
 py -m streamlit run src\streamlit_app.py      # run from the repo root; opens http://localhost:8501
-py tests\test_ui_home.py                      # headless UI and tenant-isolation checks
+py tests\test_ui_home.py                      # end-to-end UI workflows, no live model calls
+py tests\test_llm_limits.py                   # provider attempt cap and fast outage hand-off
 ```
 
 The welcome screen and data-entry flows work without `GEMINI_API_KEY`; AI answers require it.

@@ -12,14 +12,14 @@ THE FALLBACK POLICY
 -------------------
   1. Try the primary model (GEMINI_PRIMARY_MODEL in .env, default gemini-3.8-flash).
   2. On ANY availability failure (503 busy, 429 quota, 5xx, timeout, network
-     drop, 404 model not found) switch IMMEDIATELY to the next model listed in
-     GEMINI_FALLBACK_MODELS (comma-separated in .env). All models share the same
+     drop, 404 model not found) switch IMMEDIATELY to the next configured model,
+     up to LLM_MAX_MODEL_ATTEMPTS per call. All models share the same
      GEMINI_API_KEY, but Google counts the free-tier quota (20 requests/day)
      separately for each model, so a chain of models multiplies our capacity.
      (gemini-2.5-flash is NOT used: Google returns 404 "no longer available to
      new users" for our key.)
-  3. If every model fails, wait a few seconds and run the whole chain again,
-     up to LLM_MAX_ROUNDS times. A model whose DAILY quota is exhausted, or that
+  3. If every model fails, another round is optional (LLM_MAX_ROUNDS, default 1).
+     A model whose DAILY quota is exhausted, or that
      returned 404, is skipped in later rounds because retrying cannot help.
   4. Errors that a different model cannot fix (bad API key, malformed request)
      are raised straight away so the developer sees them.
@@ -77,13 +77,14 @@ FALLBACK_MODELS = [m.strip() for m in (
     or "gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite"
 ).split(",") if m.strip()]
 
-REQUEST_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))  # give up on one request after this
-MAX_ROUNDS = int(os.getenv("LLM_MAX_ROUNDS", "3"))                 # how many times to walk the whole chain
+REQUEST_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_SECONDS", "15"))  # cap one provider wait for interactive use
+MAX_ROUNDS = int(os.getenv("LLM_MAX_ROUNDS", "1"))                 # one pass: avoid long outage retry loops
 TRACE_PATH = Path("evidence/traces/llm_calls.jsonl")               # where call records are appended
 
 # The full ordered chain. dict.fromkeys() removes duplicates while keeping order,
 # e.g. if someone lists the primary model in the fallback list too.
 MODELS = list(dict.fromkeys([PRIMARY_MODEL, *FALLBACK_MODELS]))
+MAX_MODEL_ATTEMPTS = max(1, int(os.getenv("LLM_MAX_MODEL_ATTEMPTS", "2")))
 
 # Fail early with a clear message instead of a confusing SDK error later.
 if not API_KEY:
@@ -213,6 +214,8 @@ def call_with_fallback(request: Callable[[str], Any], label: str,
         if not models:
             break                                   # every model is out of quota / 404
         for model in models:
+            if len(attempts) >= MAX_MODEL_ATTEMPTS:
+                break
             t0 = time.monotonic()
             try:
                 response = request(model)           # <-- the actual API call happens here
@@ -233,6 +236,8 @@ def call_with_fallback(request: Callable[[str], Any], label: str,
                     unusable.add(model)             # do not waste time on it again
                 nxt = "next model" if model != models[-1] else "end of round"
                 print(f"[WARN] {model} failed ({reason}) -> {nxt}")
+        if len(attempts) >= MAX_MODEL_ATTEMPTS:
+            break
         # Whole chain failed this round. Wait a little before the next round,
         # but only if at least one model could still recover (e.g. a busy 503).
         if round_no < MAX_ROUNDS and any(m not in unusable for m in chain):

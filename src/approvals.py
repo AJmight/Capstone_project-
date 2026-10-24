@@ -188,6 +188,7 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "",
                          tenant_id, user_id, draft_id)
 
     # Record feedback into persistent SQLite memory (Week 6 justified memory use case)
+    mem_mgr = None
     try:
         from memory import MemoryManager, MemoryType
         mem_mgr = MemoryManager()
@@ -204,6 +205,12 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "",
         )
     except Exception:
         pass
+    finally:
+        if mem_mgr is not None:
+            try:
+                mem_mgr.close()
+            except Exception:
+                pass
 
     # --- F-24: the human decision also advances the Week 6 workflow state ---
     if state_mgr is not None and session is not None:
