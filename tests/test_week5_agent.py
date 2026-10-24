@@ -12,7 +12,7 @@ manners) enforces the contract:
     double-drafting model  -> second draft -> POSTCONDITION_FAILED (at most one draft)
     looping model          -> repeated calls blocked, then iteration limit -> HANDOFF
     off-contract model     -> compare_supplier_quotes blocked (NOT_IN_TASK_CONTRACT)
-    model unavailable      -> HANDOFF_MODEL_UNAVAILABLE
+    model unavailable      -> deterministic fallback (no model call): drafts what fits the budget
     forgetful model        -> summary without the approval status line -> POSTCONDITION_FAILED
     false draft claim      -> fake "awaiting approval" summary with no draft -> corrected (F-13)
     tool-hungry model      -> cut off after MAX_TOOL_CALLS executions -> HANDOFF_TOOL_CALL_LIMIT
@@ -267,11 +267,24 @@ def test_offline_09_off_contract_tool_blocked():
         assert err.startswith("NOT_IN_TASK_CONTRACT") and not rec["state"]["drafts_created"]
 
 
-def test_offline_10_model_unavailable_handoff():
-    """Every model 503 -> HANDOFF_MODEL_UNAVAILABLE with a clear message; no draft."""
+def test_offline_10_model_unavailable_falls_back_to_deterministic_plan():
+    """Every model 503 -> the run falls back to the deterministic plan (no model call)
+    and still drafts what fits the budget, so the shop owner is never blocked by quota."""
     with sandbox(), fake_model(unavailable=True):
         rec = restock_agent.run_restock(300000)
-        assert rec["outcome"] == "HANDOFF_MODEL_UNAVAILABLE" and "unavailable" in rec["final_text"]
+    # The fallback path is recorded in the trace and the outcome is still decided by code.
+    assert rec["outcome"] == "DRAFT_READY", rec["outcome"]
+    assert rec["state"]["drafts_created"], "the fallback must still create a draft"
+    assert "deterministic-fallback" in rec["loop"]["models_used"]
+    assert "AWAITING HUMAN APPROVAL" in rec["final_text"].upper(), rec["final_text"]
+
+
+def test_offline_10b_model_unavailable_nothing_fits():
+    """Same fallback, but a budget too small for anything -> NOTHING_FITS_BUDGET, no draft."""
+    with sandbox(), fake_model(unavailable=True):
+        rec = restock_agent.run_restock(10000)
+    assert rec["outcome"] == "NOTHING_FITS_BUDGET", rec["outcome"]
+    assert not rec["state"]["drafts_created"]
 
 
 def test_offline_11_summary_must_mention_approval():
