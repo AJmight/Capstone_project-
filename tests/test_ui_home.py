@@ -78,6 +78,12 @@ def open_business(at: AppTest, name: str) -> str:
     return tenant_context.business_tenant_id(name)
 
 
+def go_to_page(at: AppTest, page: str) -> None:
+    """Use the visible bottom-bar button used by the live workspace."""
+    slug = page.lower().replace(" ", "_")
+    next(button for button in at.button if button.key == f"workspace_nav_{slug}").click().run()
+
+
 def write_rows(path: Path, headers: list[str], rows: list[dict]) -> None:
     """Create a tenant-local fixture using the production CSV schema."""
     with path.open("w", encoding="utf-8", newline="") as target:
@@ -154,14 +160,11 @@ def test_ui06_workspace_routes_render():
     at.text_input(key="business_name_input").input("UI Route Shop")
     at.form_submit_button[0].click().run()
     for page in EXPECTED_ROUTES:
-        at.radio(key="workspace_page").set_value(page).run()
+        go_to_page(at, page)
         assert not at.exception, f"{page}: {at.exception}"
-    at.radio(key="workspace_page").set_value("Dashboard").run()
+    go_to_page(at, "Dashboard")
     assert "AI Copilot" in page_text(at), "Dashboard should open the shop's AI Copilot view"
-    next(button for button in at.button if "Which items are low on stock?" in button.label).click().run()
-    assert not at.exception, at.exception
-    tenant_id = tenant_context.business_tenant_id("UI Route Shop")
-    assert at.session_state[f"assistant_question_{tenant_id}"] == "Which items are low on stock?"
+    assert len(at.chat_input) == 1, "Dashboard should present a chat-style question input"
     next(button for button in at.button if button.label == "↔ Switch shop").click().run()
     assert not at.exception, at.exception
     assert "tenant_id" not in at.session_state
@@ -171,7 +174,7 @@ def test_ui08_stock_item_can_be_added_from_the_ui():
     at = fresh_app()
     at.text_input(key="business_name_input").input("UI Stock Entry Shop")
     at.form_submit_button[0].click().run()
-    at.radio(key="workspace_page").set_value("Operations").run()
+    go_to_page(at, "Operations")
     next(item for item in at.text_input if item.label == "Product name").input("Blue exercise book")
     next(item for item in at.text_input if item.label == "Category").input("Stationery")
     next(item for item in at.number_input if item.label == "Current stock").set_value(5)
@@ -231,7 +234,7 @@ def test_ui10_business_data_can_use_a_separate_storage_root():
 def test_ui11_operations_record_sales_purchases_and_quotes():
     at = fresh_app()
     tenant_id = open_business(at, "UI Operations Flow")
-    at.radio(key="workspace_page").set_value("Operations").run()
+    go_to_page(at, "Operations")
     at.text_input(key=f"new_stock_name_{tenant_id}").input("Blue exercise book")
     at.text_input(key=f"new_stock_category_{tenant_id}").input("Stationery")
     at.number_input(key=f"new_stock_current_{tenant_id}").set_value(10)
@@ -279,13 +282,13 @@ def test_ui12_restocks_create_a_session_and_open_approvals_automatically():
     at = fresh_app()
     tenant_id = open_business(at, "UI Restock Session Flow")
     seed_one_low_item(tenant_id)
-    at.radio(key="workspace_page").set_value("Restock AI").run()
+    go_to_page(at, "Restock AI")
     assert at.radio(key=f"restock_method_{tenant_id}").value == "Quick deterministic plan"
     at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
     next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
     assert not at.exception, at.exception
-    assert at.radio(key="workspace_page").value == "Approvals", (
-        f"a saved draft should open the review queue; got {at.radio(key='workspace_page').value}; "
+    assert at.session_state["workspace_page"] == "Approvals", (
+        f"a saved draft should open the review queue; got {at.session_state['workspace_page']}; "
         f"errors={[e.value for e in at.error]}; text={page_text(at)}")
     assert any("is ready here for your review" in success.value for success in at.success)
     assert any("Read 1 low-stock items" in item.value for item in at.markdown)
@@ -302,7 +305,7 @@ def test_ui12_restocks_create_a_session_and_open_approvals_automatically():
 
     # A second run in the same browser must get a fresh workflow session and
     # leave the first pending draft untouched.
-    at.radio(key="workspace_page").set_value("Restock AI").run()
+    go_to_page(at, "Restock AI")
     next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
     assert not at.exception, at.exception
     pending = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
@@ -313,7 +316,7 @@ def test_ui13_approval_edit_and_decision_are_session_safe():
     at = fresh_app()
     tenant_id = open_business(at, "UI Approval Flow")
     seed_one_low_item(tenant_id)
-    at.radio(key="workspace_page").set_value("Restock AI").run()
+    go_to_page(at, "Restock AI")
     at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
     next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
     draft_summary = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")[0]
@@ -334,11 +337,11 @@ def test_ui13_approval_edit_and_decision_are_session_safe():
     decided = approvals.load_draft(draft["draft_id"], tenant_id, "default-user")
     assert decided["status"] == "APPROVED"
     assert decided["decision"]["decided_by"] == "UI Approval Flow"
-    assert at.radio(key="workspace_page").value == "Approvals"
+    assert at.session_state["workspace_page"] == "Approvals"
 
     # A second draft can be rejected only after a human enters both the reason
     # and the exact confirmation; the workflow then records REJECTED.
-    at.radio(key="workspace_page").set_value("Restock AI").run()
+    go_to_page(at, "Restock AI")
     next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
     second = next(d for d in approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
                   if d["status"] == procurement.DRAFT_STATUS)
@@ -404,11 +407,11 @@ def test_ui15_copilot_context_survives_turns_and_clears_on_shop_switch():
                 "latency_s": 0.03, "run_id": "mock-run"}
 
     with patch.object(tool_agent, "run_agent", side_effect=fake_agent):
-        at.text_area(key=f"assistant_question_{tenant_a}").input("What is low in stock?")
-        next(b for b in at.form_submit_button if "Ask Copilot" in b.label).click().run()
+        at.chat_input[0].set_value("What is low in stock?")
+        at.run()
         assert not at.exception, at.exception
-        at.text_area(key=f"assistant_question_{tenant_a}").input("What source did you use?")
-        next(b for b in at.form_submit_button if "Ask Copilot" in b.label).click().run()
+        at.chat_input[0].set_value("What source did you use?")
+        at.run()
         assert not at.exception, at.exception
         assert len(calls) == 2
         assert "What is low in stock?" in calls[1][0]
@@ -419,15 +422,15 @@ def test_ui15_copilot_context_survives_turns_and_clears_on_shop_switch():
         assert not at.exception, at.exception
         assert f"copilot_history_{tenant_a}" not in at.session_state
 
-        at.radio(key="workspace_page").set_value("Operations").run()
+        go_to_page(at, "Operations")
         at.text_input(key=f"new_stock_name_{tenant_a}").input("Unsaved item from shop A")
         next(b for b in at.button if b.label == "↔ Switch shop").click().run()
         tenant_b = open_business(at, "UI Chat Shop B")
-        at.radio(key="workspace_page").set_value("Operations").run()
+        go_to_page(at, "Operations")
         assert at.text_input(key=f"new_stock_name_{tenant_b}").value == ""
-        at.radio(key="workspace_page").set_value("Dashboard").run()
-        at.text_area(key=f"assistant_question_{tenant_b}").input("What is low in stock?")
-        next(b for b in at.form_submit_button if "Ask Copilot" in b.label).click().run()
+        go_to_page(at, "Dashboard")
+        at.chat_input[0].set_value("What is low in stock?")
+        at.run()
         assert not at.exception, at.exception
         assert "What source did you use?" not in calls[-1][0]
         assert calls[-1][1] == tenant_b

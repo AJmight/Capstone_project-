@@ -42,6 +42,7 @@ Version: 1.1.0 (tenant-aware prototype screens)
 # ---------------------------------------------------------------------------
 import html                                    # escape the entered business name in custom HTML
 import csv                                     # read and write this business's CSV records
+import io                                      # build downloadable CSV content in memory
 import os                                      # atomic replace for CSV saves
 import re                                      # safe IDs for policy documents
 import sys                                     # make "src" importable (see next comment)
@@ -85,7 +86,7 @@ st.set_page_config(
 # is the Dashboard screen, matching the exported screen and the intended flow.
 # ---------------------------------------------------------------------------
 WORKSPACE_PAGES = ["Dashboard", "Operations", "Restock AI", "Approvals"]
-NAV_ICONS = {"Dashboard": "▦", "Operations": "▤", "Restock AI": "✧", "Approvals": "✓"}
+NAV_ICONS = {"Dashboard": "💬", "Operations": "🧰", "Restock AI": "🌱", "Approvals": "🛡️"}
 
 # Inline SVG keeps icons sharp and available even when Google Fonts/CDNs are offline.
 ICON_PATHS = {
@@ -187,19 +188,32 @@ CSS = """
   input,textarea,[data-baseweb="select"] > div { background:var(--paper) !important; border-color:var(--line) !important; border-radius:4px !important; }
   [data-testid="stTabs"] button { min-height:44px; font-weight:600; }
   [data-testid="stAlert"] { border-radius:4px; border-left:4px solid var(--teal); }
-  .st-key-workspace_nav [data-testid="stRadio"] { position:fixed; z-index:1000; left:0; right:0; bottom:0; margin:0; padding:.35rem max(.75rem,env(safe-area-inset-right)) calc(.35rem + env(safe-area-inset-bottom)); background:rgba(252,249,248,.98); border-top:1px solid var(--line); }
-  .st-key-workspace_nav [data-testid="stRadio"] > label { display:none; }
-  .st-key-workspace_nav [role="radiogroup"] { display:flex; justify-content:center; gap:.45rem; }
-  .st-key-workspace_nav [role="radiogroup"] label > div:first-child { display:none; }
-  .st-key-workspace_nav [role="radiogroup"] label { min-height:46px; justify-content:center; padding:.3rem .8rem; border:1px solid transparent; border-radius:4px; color:#52605d; transition:background .16s ease,color .16s ease,border-color .16s ease; }
-  .st-key-workspace_nav [role="radiogroup"] label:hover { background:var(--soft); }
-  .st-key-workspace_nav [role="radiogroup"] label:has(input:checked) { color:var(--teal-dark); font-weight:700; background:var(--teal-soft); border-color:#b9ddd6; }
-  .st-key-workspace_nav [role="radiogroup"] label:has(input:checked) p { color:var(--teal-dark); }
+  .st-key-workspace_nav { position:fixed!important; z-index:1000; left:0; right:0; bottom:0; margin:0 auto!important; padding:.45rem max(.75rem,env(safe-area-inset-right)) calc(.4rem + env(safe-area-inset-bottom)); background:rgba(252,249,248,.98); border-top:1px solid var(--line); box-shadow:0 -8px 24px rgba(28,27,27,.06); backdrop-filter:blur(12px); }
+  .st-key-workspace_nav [data-testid="stHorizontalBlock"] { display:grid!important; grid-template-columns:repeat(4,minmax(0,1fr)); max-width:900px; margin:0 auto; gap:.55rem; }
+  .st-key-workspace_nav [data-testid="stColumn"] { width:auto!important; min-width:0!important; flex:none!important; }
+  .st-key-workspace_nav .stButton > button { min-height:52px; border:1px solid transparent; border-radius:14px; color:#52605d; font-size:.88rem; font-weight:650; background:transparent; transition:transform .18s cubic-bezier(.2,.8,.2,1),background .2s ease,color .2s ease,box-shadow .2s ease; }
+  .st-key-workspace_nav .stButton > button:hover { transform:translateY(-3px); background:var(--soft); border-color:var(--line); color:var(--ink); }
+  .st-key-workspace_nav .stButton > button:active { transform:scale(.94); animation:nav-tap .24s ease-out; }
+  .st-key-workspace_nav .stButton > button[kind="primary"] { color:#fff; background:var(--teal); box-shadow:0 5px 14px rgba(15,118,110,.25); }
+  .st-key-nav_dashboard button[kind="primary"] { background:#7c3aed!important; border-color:#7c3aed!important; box-shadow:0 5px 16px rgba(124,58,237,.28)!important; }
+  .st-key-nav_operations button[kind="primary"] { background:#0f766e!important; border-color:#0f766e!important; }
+  .st-key-nav_restock button[kind="primary"] { background:#d97706!important; border-color:#d97706!important; box-shadow:0 5px 16px rgba(217,119,6,.25)!important; }
+  .st-key-nav_approvals button[kind="primary"] { background:#2563eb!important; border-color:#2563eb!important; box-shadow:0 5px 16px rgba(37,99,235,.25)!important; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"] { gap:.65rem; padding:.35rem 0; animation:rise-in .28s ease-out both; }
+  .st-key-copilot_transcript [data-testid="stChatMessageContent"] { max-width: min(820px,92%); padding:.8rem 1rem; border:1px solid #e2d8f7; border-radius:5px 18px 18px 18px; background:#faf8ff; box-shadow:0 3px 10px rgba(54,35,91,.045); }
+  .st-key-copilot_transcript [data-testid="stChatMessageContent"] p { color:var(--ink); line-height:1.6; }
+  .copilot-greeting { display:flex; align-items:flex-start; gap:.65rem; max-width:min(820px,92%); margin:.55rem 0 1rem; padding:.8rem .95rem; color:var(--ink); line-height:1.55; background:#faf8ff; border:1px solid #e2d8f7; border-radius:5px 18px 18px 18px; box-shadow:0 3px 10px rgba(54,35,91,.045); animation:rise-in .28s ease-out both; }
+  .copilot-greeting span { font-size:1.25rem; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"]:has([data-testid*="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] { border-color:#c6e5df; border-radius:18px 5px 18px 18px; background:#edf8f5; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"] [data-testid*="chatAvatar"] { font-size:1.25rem; }
+  div[data-testid="stChatInput"] { bottom:calc(78px + env(safe-area-inset-bottom))!important; }
+  .st-key-copilot_transcript [data-testid="stDownloadButton"] button { min-height:38px; border-radius:12px; border-color:#c9b7ed; color:#5b21b6; background:#fff; }
+  @keyframes nav-tap { 0% { transform:scale(.94); } 70% { transform:scale(1.04); } 100% { transform:scale(1); } }
   @keyframes rise-in { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
   @keyframes soft-pulse { 50% { opacity:.45; } }
   .live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#16a34a; margin-right:.35rem; animation:soft-pulse 1.8s ease-in-out infinite; }
-  @media (min-width:900px) { .block-container { padding:1.5rem 2rem 6rem; } .st-key-workspace_nav [data-testid="stRadio"] { left:max(calc((100vw - 1280px) / 2),0px); right:max(calc((100vw - 1280px) / 2),0px); } }
-  @media (max-width:640px) { .block-container { padding:.8rem .75rem 6rem; } .feature-strip { grid-template-columns:1fr; } .workspace-title { font-size:1.1rem; } .page-heading h1 { font-size:1.45rem; } .st-key-workspace_nav [role="radiogroup"] { gap:.08rem; } .st-key-workspace_nav [role="radiogroup"] label { min-height:50px; padding:.2rem .22rem; font-size:.75rem; } .stock-threshold { display:none; } .stock-item-row { gap:.45rem; } .st-key-dashboard_metrics [data-testid="stHorizontalBlock"] { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (min-width:900px) { .block-container { padding:1.5rem 2rem 6rem; } .st-key-workspace_nav { left:max(calc((100vw - 1280px) / 2),0px); right:max(calc((100vw - 1280px) / 2),0px); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; } }
+  @media (max-width:640px) { .block-container { padding:.8rem .75rem 6rem; } .feature-strip { grid-template-columns:1fr; } .workspace-title { font-size:1.1rem; } .page-heading h1 { font-size:1.45rem; } .st-key-workspace_nav { padding-left:.4rem; padding-right:.4rem; } .st-key-workspace_nav [data-testid="stHorizontalBlock"] { gap:.08rem; } .st-key-workspace_nav .stButton > button { min-height:50px; padding:.2rem .08rem; font-size:.69rem; border-radius:11px; } .st-key-copilot_transcript [data-testid="stChatMessageContent"] { max-width:100%; padding:.68rem .78rem; } .st-key-dashboard_metrics [data-testid="stHorizontalBlock"] { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } .stock-threshold { display:none; } .stock-item-row { gap:.45rem; } }
   @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; } }
 </style>
 """
@@ -276,15 +290,22 @@ def render_business_home() -> None:
     """Show the four Stitch workspaces and route every action through one tenant."""
     tenant_id = st.session_state["tenant_id"]
     business_name = st.session_state["business_name"]
-    # Callbacks and page actions queue navigation here. Apply it BEFORE st.radio
-    # is created; mutating a widget's state later in the same run raises a
-    # StreamlitWidgetAlreadyInstantiatedError.
+    # Callbacks and page actions queue navigation here. Apply it before rendering
+    # the bottom bar so saved drafts open Approvals on the next run.
     next_page = st.session_state.pop("_next_workspace_page", None)
     if next_page in WORKSPACE_PAGES:
         st.session_state["workspace_page"] = next_page
     with st.container(key="workspace_nav"):
-        page = st.radio("Workspace", WORKSPACE_PAGES, format_func=lambda item: f"{NAV_ICONS[item]}  {item}",
-                        horizontal=True, label_visibility="collapsed", key="workspace_page")
+        nav_cols = st.columns(4)
+        page = st.session_state.get("workspace_page", "Dashboard")
+        for index, destination in enumerate(WORKSPACE_PAGES):
+            slug = destination.lower().replace(" ", "_")
+            with nav_cols[index]:
+                with st.container(key=f"nav_{slug}"):
+                    st.button(f"{NAV_ICONS[destination]}  {destination}",
+                              key=f"workspace_nav_{slug}", width="stretch",
+                              type="primary" if page == destination else "secondary",
+                              on_click=_set_workspace_page, args=(destination,))
     safe_name = html.escape(business_name)
     header, switch = st.columns([6, 1])
     with header:
@@ -311,6 +332,12 @@ def _switch_business() -> None:
     for key in ("tenant_id", "business_name", "business_name_input", "workspace_page",
                 "_next_workspace_page"):
         st.session_state.pop(key, None)
+
+
+def _set_workspace_page(destination: str) -> None:
+    """Switch workspace from an animated button in the fixed bottom navigation."""
+    if destination in WORKSPACE_PAGES:
+        st.session_state["workspace_page"] = destination
 
 
 def render_dashboard(tenant_id: str, business_name: str) -> None:
@@ -443,13 +470,20 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
     if summary:
         with st.expander("Earlier conversation · compacted context"):
             st.caption(summary)
-    for turn in history:
-        with st.chat_message("user"):
-            st.write(turn["question"])
-        with st.chat_message("assistant"):
-            st.write(turn["answer"])
-            if turn.get("latency_s") is not None:
-                st.caption(f"{turn.get('latency_s')} s · source-aware · tenant-scoped")
+    with st.container(key="copilot_transcript"):
+        if not history:
+            st.markdown('<div class="copilot-greeting"><span>🤖</span><div>Hi! Ask me what\'s running low, '
+                        'compare supplier prices, or find a shop policy. When I use your records, '
+                        'I can give you a CSV to download.</div></div>', unsafe_allow_html=True)
+        for index, turn in enumerate(history):
+            with st.chat_message("user", avatar="🙋"):
+                st.write(turn["question"])
+            with st.chat_message("assistant", avatar="🤖"):
+                st.markdown(turn["answer"])
+                if turn.get("result_rows"):
+                    _render_csv_download(turn["result_rows"], tenant_id, index)
+                if turn.get("latency_s") is not None:
+                    st.caption(f"{turn.get('latency_s')} s · checked against this shop's records")
     if history or summary:
         st.button("Clear conversation", key=f"clear_conversation_{tenant_id}",
                   on_click=_clear_copilot_context, args=(tenant_id,))
@@ -462,13 +496,14 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
     prompt_cols = st.columns(2)
     for index, (label, prompt) in enumerate(prompts):
         prompt_cols[index % 2].button(label, key=f"assistant_prompt_{tenant_id}_{index}", width="stretch",
-                                      on_click=_select_assistant_prompt, args=(prompt, question_key))
-    with st.form(f"ask_business_{tenant_id}"):
-        question = st.text_area("Ask about your business", key=question_key,
-                                placeholder="Ask about stock, suppliers, purchases or policies…", height=100)
-        with st.container(key="ai_submit"):
-            submitted = st.form_submit_button("✧  Ask Copilot", type="primary", width="stretch")
-    if submitted:
+                                      on_click=_queue_assistant_prompt, args=(prompt, tenant_id))
+    queued_key = f"assistant_queued_question_{tenant_id}"
+    queued_question = st.session_state.pop(queued_key, None)
+    question = st.chat_input("Message your shop assistant…", key=question_key)
+    question = queued_question or question
+    if queued_question:
+        st.caption(f"You asked: {queued_question}")
+    if question:
         if not question.strip():
             st.warning("Enter a question first.")
         else:
@@ -479,18 +514,58 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
                                        tenant_id=tenant_id)
                     status.update(label="Response ready", state="complete", expanded=False)
                 answer = result.get("final_text", "The assistant returned no response.")
-                _save_copilot_turn(tenant_id, question.strip(), answer, result.get("latency_s"))
-                st.markdown('<div class="response-card"><div class="response-label">'
-                            f'{_icon_svg("sparkles", 16)} COPILOT RESPONSE</div></div>', unsafe_allow_html=True)
-                st.markdown(answer)
-                st.caption(f"Run {result.get('run_id', 'n/a')} · {result.get('latency_s', 0)} seconds · tenant-scoped")
+                result_rows = _result_rows_for_export(result)
+                _save_copilot_turn(tenant_id, question.strip(), answer,
+                                   result.get("latency_s"), result_rows)
+                with st.chat_message("user", avatar="🙋"):
+                    st.write(question.strip())
+                with st.chat_message("assistant", avatar="🤖"):
+                    st.markdown(answer)
+                    if result_rows:
+                        _render_csv_download(result_rows, tenant_id, len(history))
+                    st.caption(f"Run {result.get('run_id', 'n/a')} · {result.get('latency_s', 0)} seconds")
+                if result.get("drafts_created"):
+                    st.session_state["_next_workspace_page"] = "Approvals"
+                    st.rerun()
             except Exception as exc:
                 st.error(f"The assistant could not complete this request: {type(exc).__name__}: {exc}")
 
 
-def _select_assistant_prompt(prompt: str, input_key: str) -> None:
-    """Put a suggestion into the chat input before that widget is instantiated."""
-    st.session_state[input_key] = prompt
+def _queue_assistant_prompt(prompt: str, tenant_id: str) -> None:
+    """Turn a suggested prompt into a normal chat message on the next run."""
+    st.session_state[f"assistant_queued_question_{tenant_id}"] = prompt
+
+
+def _result_rows_for_export(result: dict) -> list[dict]:
+    """Extract record-shaped tool results for a one-click CSV export."""
+    rows = []
+    for call in result.get("tool_calls", []):
+        if call.get("status") != "ok":
+            continue
+        payload = call.get("result", {})
+        if not isinstance(payload, dict):
+            continue
+        for key, value in payload.items():
+            if isinstance(value, list) and value and all(isinstance(row, dict) for row in value):
+                rows.extend({"Source": call.get("name", "result"), "Result group": key, **row}
+                            for row in value)
+    return rows
+
+
+def _render_csv_download(rows: list[dict], tenant_id: str, turn_index: int,
+                         key_prefix: str = "copilot_csv") -> None:
+    """Render a compact download action for tenant-scoped record-shaped results."""
+    if not rows:
+        return
+    csv_buffer = io.StringIO(newline="")
+    fieldnames = list(dict.fromkeys(key for row in rows for key in row))
+    writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    st.download_button("⬇️  Download results as CSV", csv_buffer.getvalue(),
+                       file_name=f"shop-results-{tenant_id[:8]}-{key_prefix}-{turn_index + 1}.csv",
+                       mime="text/csv", key=f"{key_prefix}_{tenant_id}_{turn_index}",
+                       width="content")
 
 
 def _copilot_context(summary: str, history: list[dict], question: str) -> str:
@@ -499,13 +574,16 @@ def _copilot_context(summary: str, history: list[dict], question: str) -> str:
 
 
 def _save_copilot_turn(tenant_id: str, question: str, answer: str,
-                       latency_s: float | None = None) -> None:
+                       latency_s: float | None = None,
+                       result_rows: list[dict] | None = None) -> None:
     """Keep four recent turns and compact older exchanges without another model call."""
     history_key = f"copilot_history_{tenant_id}"
     summary_key = f"copilot_summary_{tenant_id}"
     history = list(st.session_state.get(history_key, []))
     summary = st.session_state.get(summary_key, "")
     summary, history = compact_copilot_turn(summary, history, question, answer, latency_s)
+    if history and result_rows:
+        history[-1]["result_rows"] = result_rows
     st.session_state[history_key] = history
     st.session_state[summary_key] = summary.strip()
 
@@ -515,6 +593,7 @@ def _clear_copilot_context(tenant_id: str) -> None:
     st.session_state.pop(f"copilot_history_{tenant_id}", None)
     st.session_state.pop(f"copilot_summary_{tenant_id}", None)
     st.session_state.pop(f"assistant_question_{tenant_id}", None)
+    st.session_state.pop(f"assistant_queued_question_{tenant_id}", None)
 
 
 def render_restock_page(tenant_id: str, business_name: str) -> None:
@@ -917,6 +996,12 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
             for step in handoff.get("timeline", []):
                 st.markdown(f"**{step.get('phase', 'STEP')}** · {step.get('detail', '')} · Source: {step.get('source', 'agent trace')}")
             st.caption("Records checked: " + ", ".join(handoff.get("sources", [])))
+            plan_rows = [{"Item": row.get("item_name"), "Quantity": row.get("recommended_qty"),
+                          "Supplier": row.get("selected_supplier", "—"),
+                          "Estimated cost (UGX)": row.get("cost_ugx", row.get("total_cost_ugx", 0))}
+                         for row in handoff.get("plan", {}).get("included", [])]
+            if plan_rows:
+                _render_csv_download(plan_rows, tenant_id, 0, key_prefix="restock_csv")
     drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     waiting = [draft for draft in drafts if draft["status"] == procurement.DRAFT_STATUS]
     if not waiting:
