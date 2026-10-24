@@ -192,7 +192,8 @@ def decide(draft_id: str, decision: str, decided_by: str, reason: str = "",
         from memory import MemoryManager, MemoryType
         mem_mgr = MemoryManager()
         mem_mgr.store_memory(
-            shop_id=draft.get("shop_id", "default_shop"),
+            # Keep learned approval preferences inside the same business boundary.
+            shop_id=("default_shop" if tenant_id == DEFAULT_TENANT_ID else tenant_id),
             memory_type=MemoryType.APPROVAL_FEEDBACK,
             target_key=draft_id,
             summary=f"Owner {decision} {draft_id}: {reason or 'Approved as suggested'}",

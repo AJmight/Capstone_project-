@@ -128,7 +128,7 @@ def _returns_errors_as_results(func):
 # ---------------------------------------------------------------------------
 # Data access helpers (read + validate the CSVs)
 # ---------------------------------------------------------------------------
-def _read_csv(name: str) -> list[dict]:
+def _read_csv(name: str, tenant_id: str = DEFAULT_TENANT_ID) -> list[dict]:
     """
     Read one CSV from DATA_DIR and return a list of row dictionaries.
 
@@ -136,9 +136,16 @@ def _read_csv(name: str) -> list[dict]:
     Example row: {"item_id": "ITM001", "item_name": "Bic Pens (Blue)", "current_stock": "5", ...}
     Note: every value is still a STRING here; _int() converts numbers.
     """
-    path = DATA_DIR / name
+    # The default shop keeps the original fixture location for existing CLI use.
+    # A named business reads only its private data/tenants/<tenant_id> workspace.
+    if tenant_id == DEFAULT_TENANT_ID:
+        data_dir = DATA_DIR
+    else:
+        from tenant_context import tenant_data_dir
+        data_dir = tenant_data_dir(tenant_id)
+    path = data_dir / name
     if not path.exists():
-        raise ToolError("INVALID_DATA", f"{name} not found in {DATA_DIR}")
+        raise ToolError("INVALID_DATA", f"{name} not found in {data_dir}")
     # utf-8-sig also accepts files saved by Excel with a hidden BOM at the start.
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
@@ -281,14 +288,14 @@ def _reorder_calculation(item: dict, history: list[int], best_quote: dict | None
 # Tool 1: get_low_stock
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
-def get_low_stock() -> dict:
+def get_low_stock(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """
     List every item where current_stock <= reorder_point.
 
     Reads: current_stock.csv
     Returns: {"count": 10, "items": [{"item_id", "item_name", "current_stock", "reorder_point"}, ...]}
     """
-    inventory = _read_csv("current_stock.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
     low = []
     for row in inventory:
         stock = _int(row, "current_stock", "current_stock.csv")
@@ -304,16 +311,16 @@ def get_low_stock() -> dict:
 # Tool 2: compare_supplier_quotes
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
-def compare_supplier_quotes(item: str) -> dict:
+def compare_supplier_quotes(item: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """
     All supplier quotes for one item, cheapest first.
 
     Reads: current_stock.csv (to resolve the item), supplier_quotes.csv
     Returns: {"item_id", "item_name", "quote_count", "cheapest": {...} or None, "all_quotes": [...]}
     """
-    inventory = _read_csv("current_stock.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
     row = _resolve_item(item, inventory)                  # "Bic Pens" -> the ITM001 row
-    quotes = _quotes_for(row["item_id"], _read_csv("supplier_quotes.csv"))
+    quotes = _quotes_for(row["item_id"], _read_csv("supplier_quotes.csv", tenant_id))
     result = {"item_id": row["item_id"], "item_name": row["item_name"],
               "quote_count": len(quotes), "cheapest": quotes[0] if quotes else None,
               "all_quotes": quotes, "source": "supplier_quotes.csv"}
@@ -326,7 +333,7 @@ def compare_supplier_quotes(item: str) -> dict:
 # Tool 3: estimate_reorder_quantity
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
-def estimate_reorder_quantity(item: str) -> dict:
+def estimate_reorder_quantity(item: str, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """
     Deterministic reorder quantity for one item (fixes F-04).
 
@@ -335,10 +342,10 @@ def estimate_reorder_quantity(item: str) -> dict:
       {"recommended_qty": 65, "basis": "555 purchased over 12 months = 46.25/month; ...",
        "selected_supplier": "Kampala Office Supplies", "safety_cap": 158, "requires_override": False, ...}
     """
-    inventory = _read_csv("current_stock.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
     row = _resolve_item(item, inventory)
-    quotes = _quotes_for(row["item_id"], _read_csv("supplier_quotes.csv"))
-    history = _history_for(row["item_id"], _read_csv("past_purchases.csv"))
+    quotes = _quotes_for(row["item_id"], _read_csv("supplier_quotes.csv", tenant_id))
+    history = _history_for(row["item_id"], _read_csv("past_purchases.csv", tenant_id))
     result = _reorder_calculation(row, history, quotes[0] if quotes else None)
     result["source"] = "current_stock.csv, past_purchases.csv, supplier_quotes.csv"
     return result
@@ -374,9 +381,9 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
         raise ToolError("INVALID_PARAMETER", f"at most {MAX_ITEMS_PER_DRAFT} items per draft")
 
     # --- read all data once ---
-    inventory = _read_csv("current_stock.csv")
-    quote_rows = _read_csv("supplier_quotes.csv")
-    history_rows = _read_csv("past_purchases.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
+    quote_rows = _read_csv("supplier_quotes.csv", tenant_id)
+    history_rows = _read_csv("past_purchases.csv", tenant_id)
 
     # --- resolve names to rows, removing duplicates but keeping the user's order ---
     rows, seen = [], set()
@@ -450,7 +457,8 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
 # Tool 5: plan_within_budget  (Week 5 - used by the restock agent to decide/re-plan)
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
-def plan_within_budget(items: list[str], budget_ugx: int | None = None) -> dict:
+def plan_within_budget(items: list[str], budget_ugx: int | None = None,
+                       tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """
     Decide which low items fit a budget, most urgent first. Read-only (no file is written).
 
@@ -474,9 +482,9 @@ def plan_within_budget(items: list[str], budget_ugx: int | None = None) -> dict:
     if budget_ugx is not None and (not isinstance(budget_ugx, int) or budget_ugx <= 0):
         raise ToolError("INVALID_PARAMETER", "budget_ugx must be a positive whole number of UGX")
 
-    inventory = _read_csv("current_stock.csv")
-    quote_rows = _read_csv("supplier_quotes.csv")
-    history_rows = _read_csv("past_purchases.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
+    quote_rows = _read_csv("supplier_quotes.csv", tenant_id)
+    history_rows = _read_csv("past_purchases.csv", tenant_id)
 
     candidates, needs_human, not_low, seen = [], [], [], set()
     for ref in items:
@@ -537,7 +545,7 @@ def plan_within_budget(items: list[str], budget_ugx: int | None = None) -> dict:
 # Tool 6: get_inventory  (MVP - User Story 1: view stock, optionally by category)
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
-def get_inventory(category: str | None = None) -> dict:
+def get_inventory(category: str | None = None, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """
     List inventory items with their stock levels, optionally for one category.
 
@@ -548,7 +556,7 @@ def get_inventory(category: str | None = None) -> dict:
     An unknown category returns UNKNOWN_CATEGORY with the list of real categories, so the model
     can tell the user what exists instead of guessing.
     """
-    inventory = _read_csv("current_stock.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
     categories = sorted({r["category"] for r in inventory})
     if category is not None:
         if not isinstance(category, str) or not category.strip():
@@ -586,7 +594,8 @@ def _month(value, name: str) -> str | None:
 
 @_returns_errors_as_results
 def query_purchase_history(item: str, start_month: str | None = None,
-                           end_month: str | None = None) -> dict:
+                           end_month: str | None = None,
+                           tenant_id: str = DEFAULT_TENANT_ID) -> dict:
     """
     Past purchases of ONE item, optionally limited to a month range (inclusive).
 
@@ -599,13 +608,13 @@ def query_purchase_history(item: str, start_month: str | None = None,
       and data_range (first/last month that exists for this item), so the model can say
       "that period is not in the data" instead of inventing numbers.
     """
-    inventory = _read_csv("current_stock.csv")
+    inventory = _read_csv("current_stock.csv", tenant_id)
     row = _resolve_item(item, inventory)
     start, end = _month(start_month, "start_month"), _month(end_month, "end_month")
     if start and end and start > end:                 # 'YYYY-MM' strings sort like dates
         raise ToolError("INVALID_PARAMETER", "start_month is after end_month")
 
-    all_rows = [r for r in _read_csv("past_purchases.csv") if r["item_id"] == row["item_id"]]
+    all_rows = [r for r in _read_csv("past_purchases.csv", tenant_id) if r["item_id"] == row["item_id"]]
     months_available = sorted(r["date"][:7] for r in all_rows)
     selected = [r for r in all_rows
                 if (start is None or r["date"][:7] >= start) and (end is None or r["date"][:7] <= end)]

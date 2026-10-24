@@ -6,6 +6,8 @@ debug.log
 
 # Draft requisitions created at runtime by the agent (review with src/approvals.py)
 data/drafts/
+# Each business workspace is private runtime data.
+data/tenants/
 data/state.sqlite3
 tenants/*/data/state.sqlite3
 

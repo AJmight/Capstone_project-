@@ -41,6 +41,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from streamlit.testing.v1 import AppTest       # Streamlit's headless app runner
 
 from tools import procurement                  # to sandbox STORAGE_PATH
+import tenant_context                          # to sandbox business folders
 
 APP = ROOT / "src" / "streamlit_app.py"
 EXPECTED_CARDS = ["Ask the assistant", "Weekly restock", "Policy questions",
@@ -81,26 +82,55 @@ def test_ui02_five_feature_cards():
     assert not missing, f"missing cards: {missing}"
 
 
-def test_ui03_low_stock_figure_matches_csv():
-    low, total = expected_low_and_total()
-    text = page_text(fresh_app())
-    assert f"<b>{low}</b> of <b>{total}</b> items are low" in text, text[-400:]
+def test_ui03_welcome_does_not_show_shared_shop_records():
+    at = fresh_app()
+    assert any(item.label == "Business name" for item in at.text_input)
+    assert "items are low" not in page_text(at)
 
 
 def test_ui04_empty_name_is_refused():
     at = fresh_app()
-    at.text_input(key="name_input").input("   ").run()
+    at.text_input(key="business_name_input").input("   ").run()
     at.button[0].click().run()
-    assert any("type your name" in w.value for w in at.warning)
-    assert "user" not in at.session_state
+    assert any("enter your business name" in w.value.lower() for w in at.warning)
+    assert "tenant_id" not in at.session_state
 
 
-def test_ui05_name_logs_in():
+def test_ui05_business_name_opens_an_empty_workspace():
     at = fresh_app()
-    at.text_input(key="name_input").input("Shop Owner").run()
+    at.text_input(key="business_name_input").input("Aminah Stationery").run()
     at.button[0].click().run()
-    assert at.session_state["user"] == "Shop Owner"
-    assert any("Logged in as Shop Owner" in s.value for s in at.success)
+    tenant_id = tenant_context.business_tenant_id("Aminah Stationery")
+    assert at.session_state["business_name"] == "Aminah Stationery"
+    assert at.session_state["tenant_id"] == tenant_id
+    stock_file = tenant_context.tenant_data_dir(tenant_id) / "current_stock.csv"
+    with stock_file.open(encoding="utf-8", newline="") as source:
+        assert len(list(csv.DictReader(source))) == 0
+
+
+def test_ui06_workspace_routes_render():
+    at = fresh_app()
+    at.text_input(key="business_name_input").input("UI Route Shop").run()
+    at.button[0].click().run()
+    for page in ("Operations", "Restock AI", "Approvals", "Dashboard"):
+        at.radio(key="workspace_page").set_value(page).run()
+        assert not at.exception, f"{page}: {at.exception}"
+
+
+def test_ui07_business_stock_is_isolated():
+    shop_a = tenant_context.business_tenant_id("Business Alpha")
+    shop_b = tenant_context.business_tenant_id("Business Beta")
+    tenant_context.initialize_business_data(shop_a)
+    tenant_context.initialize_business_data(shop_b)
+    stock_file = tenant_context.tenant_data_dir(shop_a) / "current_stock.csv"
+    with stock_file.open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=["item_id", "item_name", "category",
+                                   "current_stock", "reorder_point", "unit_cost_ugx"])
+        writer.writeheader()
+        writer.writerow({"item_id": "A-001", "item_name": "Alpha stock", "category": "Test",
+                         "current_stock": 3, "reorder_point": 5, "unit_cost_ugx": 10})
+    assert procurement.get_inventory(tenant_id=shop_a)["count"] == 1
+    assert procurement.get_inventory(tenant_id=shop_b)["count"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -109,9 +139,11 @@ def test_ui05_name_logs_in():
 if __name__ == "__main__":
     tests = [(n, f) for n, f in list(globals().items()) if n.startswith("test_") and callable(f)]
     saved = procurement.STORAGE_PATH
+    saved_tenants_root = tenant_context.TENANTS_ROOT
     passed = 0
     with tempfile.TemporaryDirectory() as folder:
         procurement.STORAGE_PATH = Path(folder) / "state.sqlite3"   # never the real database
+        tenant_context.TENANTS_ROOT = Path(folder) / "tenants"
         try:
             for name, fn in tests:
                 try:
@@ -122,5 +154,6 @@ if __name__ == "__main__":
                     print(f"FAIL  {name}: {type(error).__name__}: {error}")
         finally:
             procurement.STORAGE_PATH = saved
-    print(f"UI home screen: {passed}/{len(tests)} passed")
+            tenant_context.TENANTS_ROOT = saved_tenants_root
+    print(f"UI checks: {passed}/{len(tests)} passed")
     sys.exit(0 if passed == len(tests) else 1)

@@ -72,6 +72,7 @@ TOOL_REGISTRY = {
     "get_low_stock": {
         "function": procurement.get_low_stock,
         "side_effect": "none",
+        "context_args": ["tenant_id"],
         "declaration": {
             "name": "get_low_stock",
             "description": ("List every inventory item whose current_stock is at or below its "
@@ -83,6 +84,7 @@ TOOL_REGISTRY = {
     "compare_supplier_quotes": {
         "function": procurement.compare_supplier_quotes,
         "side_effect": "none",
+        "context_args": ["tenant_id"],
         "declaration": {
             "name": "compare_supplier_quotes",
             "description": ("Return all supplier quotes for ONE item sorted cheapest first "
@@ -94,6 +96,7 @@ TOOL_REGISTRY = {
     "estimate_reorder_quantity": {
         "function": procurement.estimate_reorder_quantity,
         "side_effect": "none",
+        "context_args": ["tenant_id"],
         "declaration": {
             "name": "estimate_reorder_quantity",
             "description": ("Compute the exact recommended reorder quantity for ONE item from its "
@@ -126,6 +129,7 @@ TOOL_REGISTRY = {
     "plan_within_budget": {
         "function": procurement.plan_within_budget,
         "side_effect": "none",                # read-only: it plans, it writes nothing
+        "context_args": ["tenant_id"],
         "declaration": {
             "name": "plan_within_budget",
             "description": ("Decide which low-stock items fit a budget, most urgent first "
@@ -150,6 +154,7 @@ TOOL_REGISTRY = {
 TOOL_REGISTRY["get_inventory"] = {
     "function": procurement.get_inventory,
     "side_effect": "none",
+    "context_args": ["tenant_id"],
     "declaration": {
         "name": "get_inventory",
         "description": ("List inventory items with current stock, reorder point and whether each is low. "
@@ -162,6 +167,7 @@ TOOL_REGISTRY["get_inventory"] = {
 TOOL_REGISTRY["query_purchase_history"] = {
     "function": procurement.query_purchase_history,
     "side_effect": "none",
+    "context_args": ["tenant_id"],
     "declaration": {
         "name": "query_purchase_history",
         "description": ("Past purchases of ONE item with exact totals (quantity and spend), optionally for a "

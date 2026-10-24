@@ -212,7 +212,8 @@ def _handoffs(state: AgentState) -> list[str]:
 # The agent run
 # ---------------------------------------------------------------------------
 def run_restock(budget_ugx: int, user_name: str = "shop user",
-                save_trace_as: str | None = None, shop_id: str = "default_shop") -> dict:
+                save_trace_as: str | None = None, shop_id: str = "default_shop",
+                tenant_id: str = "default-shop", user_id: str = DEFAULT_USER_ID) -> dict:
     """Run the weekly restock task once. Returns the full run record (also logged)."""
     state = AgentState(goal=GOAL, budget_ugx=budget_ugx, user_name=user_name)
     run, final_text = None, ""
@@ -251,7 +252,8 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
             except Exception:
                 pass
 
-        sense, status = execute_tool("get_low_stock", {}, run_id="sense")
+        sense, status = execute_tool("get_low_stock", {},
+                                     context={"tenant_id": tenant_id}, run_id="sense")
         if "error" in sense:
             state.log("SENSE", f"failed: {sense['error']}")
             state.outcome = "HANDOFF_SENSE_FAILED"
@@ -306,7 +308,8 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
 
         run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
                         max_tool_calls=MAX_TOOL_CALLS, on_tool_result=state.observe,
-                        trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS)
+                        trace_label="restock_agent", allowed_tools=CONTRACT_TOOLS,
+                        tenant_id=tenant_id)
         final_text = run["final_text"]
         if run["steps"] and not run["steps"][-1]["tool_requests"]:
             state.log("PLAN/DECIDE", f"turn {run['steps'][-1]['turn']} ({run['steps'][-1]['model']}) "
@@ -382,11 +385,11 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         # the same scope; approvals.py then shows these agent_checks next to the draft.
         if state.drafts_created:
             storage = SQLiteStorage(procurement.STORAGE_PATH)
-            record = storage.load_draft(state.drafts_created[0], DEFAULT_TENANT_ID, DEFAULT_USER_ID)
+            record = storage.load_draft(state.drafts_created[0], tenant_id, user_id)
             if record is not None:
                 record["agent_checks"] = {"outcome": state.outcome, "postconditions": state.postconditions,
                                           "budget_ugx": budget_ugx}
-                storage.update_draft(record, DEFAULT_TENANT_ID, DEFAULT_USER_ID)
+                storage.update_draft(record, tenant_id, user_id)
 
     state.handoffs = _handoffs(state)
     state.log("STOP", f"outcome {state.outcome}"
