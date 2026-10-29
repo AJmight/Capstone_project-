@@ -94,8 +94,20 @@ def test_groq_tool_response_is_normalized_for_agent_loop():
     assert response.function_calls[0].name == "get_low_stock"
 
 
+def test_groq_http_failures_are_retryable():
+    """Quota, temporary outage, and rejected Groq credentials advance the chain."""
+    for code in (401, 403, 408, 429, 500, 503):
+        response = SimpleNamespace(status_code=code)
+        error = llm_client.httpx.HTTPStatusError(
+            "provider failure", request=None, response=response)
+        should_switch, reason = llm_client._classify(error)
+        assert should_switch, (code, reason)
+
+
 if __name__ == "__main__":
     test_chat_session_hands_compacted_history_to_groq()
     test_groq_tool_response_is_normalized_for_agent_loop()
+    test_groq_http_failures_are_retryable()
     print("PASS  Gemini quota handoff preserves chat history")
     print("PASS  Groq function calls use the Gemini agent response contract")
+    print("PASS  Groq quota, credential, and service errors are retryable")

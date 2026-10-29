@@ -70,6 +70,7 @@ from rag import index as policy_index
 from rag.policy_qa import answer_policy_question
 from conversation_context import (COPILOT_RECENT_TURNS, COPILOT_SUMMARY_LIMIT,
                                   build_copilot_context, compact_copilot_turn)
+from llm_client import groq_fallback_configured
 
 # ---------------------------------------------------------------------------
 # Page set-up: must be the first Streamlit call in the script
@@ -199,19 +200,20 @@ CSS = """
   .st-key-nav_operations button[kind="primary"] { background:#0f766e!important; border-color:#0f766e!important; }
   .st-key-nav_restock button[kind="primary"] { background:#d97706!important; border-color:#d97706!important; box-shadow:0 5px 16px rgba(217,119,6,.25)!important; }
   .st-key-nav_approvals button[kind="primary"] { background:#2563eb!important; border-color:#2563eb!important; box-shadow:0 5px 16px rgba(37,99,235,.25)!important; }
-  .st-key-copilot_transcript [data-testid="stChatMessage"] { gap:.65rem; padding:.35rem 0; animation:rise-in .28s ease-out both; }
-  .st-key-copilot_transcript [data-testid="stChatMessageContent"] { max-width: min(820px,92%); padding:.8rem 1rem; border:1px solid #e2d8f7; border-radius:5px 18px 18px 18px; background:#faf8ff; box-shadow:0 3px 10px rgba(54,35,91,.045); }
-  .st-key-copilot_transcript [data-testid="stChatMessageContent"] p { color:var(--ink); line-height:1.6; }
-  .copilot-greeting { display:flex; align-items:flex-start; gap:.65rem; max-width:min(820px,92%); margin:.55rem 0 1rem; padding:.8rem .95rem; color:var(--ink); line-height:1.55; background:#faf8ff; border:1px solid #e2d8f7; border-radius:5px 18px 18px 18px; box-shadow:0 3px 10px rgba(54,35,91,.045); animation:rise-in .28s ease-out both; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"] { gap:.65rem; padding:.45rem 0; animation:rise-in .28s ease-out both; }
+  .st-key-copilot_transcript [data-testid="stChatMessageContent"] { max-width:min(760px,88%); padding:.85rem 1.05rem; border:1px solid #ded5f5; border-radius:18px 18px 18px 5px; background:#f3efff; box-shadow:0 5px 16px rgba(54,35,91,.07); }
+  .st-key-copilot_transcript [data-testid="stChatMessageContent"] p { color:var(--ink); line-height:1.65; }
+  .copilot-greeting { display:flex; align-items:flex-start; gap:.65rem; max-width:min(760px,88%); margin:.65rem 0 1rem; padding:.9rem 1.05rem; color:var(--ink); line-height:1.6; background:#f3efff; border:1px solid #ded5f5; border-radius:18px 18px 18px 5px; box-shadow:0 5px 16px rgba(54,35,91,.07); animation:rise-in .28s ease-out both; }
   .copilot-greeting span { font-size:1.25rem; }
-  .st-key-copilot_transcript [data-testid="stChatMessage"]:has([data-testid*="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] { border-color:#c6e5df; border-radius:18px 5px 18px 18px; background:#edf8f5; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"]:has([data-testid*="chatAvatarIcon-user"]) { flex-direction:row-reverse; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"]:has([data-testid*="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] { margin-left:auto; border-color:#b9e2d9; border-radius:18px 18px 5px 18px; background:#dff5ee; box-shadow:0 5px 16px rgba(0,92,85,.08); }
   .st-key-copilot_transcript [data-testid="stChatMessage"] [data-testid*="chatAvatar"] { font-size:1.25rem; }
   div[data-testid="stChatInput"] { bottom:calc(78px + env(safe-area-inset-bottom))!important; z-index:1000 !important; }
   /* The transcript is a real scroll box: it fills the space above the chat-input
    * dock and scrolls, so a long conversation never pushes the latest answer
    * under the input. The bottom padding keeps the newest message clear of the
    * dock, and the JS below scrolls to the bottom after every turn. */
-  .st-key-copilot_transcript { padding-bottom:calc(130px + env(safe-area-inset-bottom))!important; overflow-y:auto; max-height:calc(100vh - 240px); scroll-behavior:smooth; position:relative; }
+  .st-key-copilot_transcript { padding:.9rem clamp(.35rem,3vw,1.5rem) calc(130px + env(safe-area-inset-bottom))!important; overflow-y:auto; max-height:calc(100vh - 240px); scroll-behavior:smooth; position:relative; background:linear-gradient(180deg,#fff 0%,#fbfaf8 100%); border:1px solid #e6e2de; border-radius:20px; box-shadow:inset 0 1px 5px rgba(28,27,27,.035); }
   .st-key-copilot_transcript [data-testid="stChatMessage"]:last-child { scroll-margin-bottom:160px; }
   .st-key-copilot_transcript [data-testid="stVerticalPortal"] { z-index:50; }
   .st-key-copilot_transcript [data-testid="stDownloadButton"] button { min-height:38px; border-radius:12px; border-color:#c9b7ed; color:#5b21b6; background:#fff; }
@@ -543,6 +545,11 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
                                            tenant_id=tenant_id)
                         status.update(label="Response ready", state="complete", expanded=False)
                 answer = result.get("final_text", "The assistant returned no response.")
+                if (result.get("stopped_reason") == "model_unavailable"
+                        and not groq_fallback_configured()):
+                    st.error("The chat could not reach Gemini, and the Groq backup is not configured "
+                             "on this server. Add GROQ_API_KEY in the Render service Environment "
+                             "settings, then redeploy.")
                 result_rows = _result_rows_for_export(result)
                 _save_copilot_turn(tenant_id, question.strip(), answer,
                                    result.get("latency_s"), result_rows,

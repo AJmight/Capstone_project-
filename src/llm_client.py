@@ -60,7 +60,7 @@ load_dotenv()
 # Settings (all come from .env; see .env.example for the full list)
 # ---------------------------------------------------------------------------
 API_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_MODEL_ID = f"groq:{GROQ_MODEL}"
 GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -87,6 +87,11 @@ MODELS = list(dict.fromkeys(
     [PRIMARY_MODEL, *([GROQ_MODEL_ID] if GROQ_API_KEY else []), *FALLBACK_MODELS]
 ))
 MAX_MODEL_ATTEMPTS = max(1, int(os.getenv("LLM_MAX_MODEL_ATTEMPTS", str(len(MODELS)))))
+
+
+def groq_fallback_configured() -> bool:
+    """Report whether this running process can actually call its Groq fallback."""
+    return bool(GROQ_API_KEY and GROQ_MODEL_ID in MODELS)
 
 # Fail early with a clear message instead of a confusing SDK error later.
 if not API_KEY:

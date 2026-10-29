@@ -134,6 +134,10 @@ def page_text(at: AppTest) -> str:
 def test_ui01_page_renders():
     at = fresh_app()
     assert not at.exception, at.exception
+    styles = page_text(at)
+    assert "flex-direction:row-reverse" in styles
+    assert "background:#dff5ee" in styles
+    assert "background:#f3efff" in styles
 
 
 def test_ui02_business_entry_matches_workspace_flow():
@@ -468,6 +472,19 @@ def test_ui15_copilot_context_survives_turns_and_clears_on_shop_switch():
         assert at.session_state[f"copilot_history_{tenant_b}"][-1]["tool_calls"]
         assert "What source did you use?" not in calls[-1][0]
         assert calls[-1][1] == tenant_b
+
+
+def test_ui_copilot_explains_unconfigured_groq_backup():
+    """If the provider chain fails without Groq configured, show the setup step."""
+    at = fresh_app()
+    open_business(at, "UI Missing Groq Config")
+    with patch.object(tool_agent, "run_agent", return_value={
+            "final_text": "The AI service is unavailable right now.",
+            "stopped_reason": "model_unavailable", "tool_calls": []}):
+        at.chat_input[0].set_value("What is low in stock?")
+        at.run()
+    assert not at.exception, at.exception
+    assert any("GROQ_API_KEY" in error.value for error in at.error)
 
 
 @fake_restock_ai

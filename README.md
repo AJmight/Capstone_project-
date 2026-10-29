@@ -128,7 +128,9 @@ py tests\test_llm_limits.py                   # provider attempt cap and fast ou
 ```
 
 The welcome screen and data-entry flows work without model keys. AI answers require
-`GEMINI_API_KEY`; set `GROQ_API_KEY` in the ignored local `.env` to enable provider fallback.
+`GEMINI_API_KEY`; set `GROQ_API_KEY` in the ignored local `.env` and in Render's service
+Environment settings to enable provider fallback. A Render blueprint's `sync: false` key must be
+entered in the Render dashboard; adding it to this repository does not configure the running service.
 
 ## Repository layout
 
