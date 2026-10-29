@@ -12,16 +12,17 @@ result (a dictionary) is sent back to the model to explain to the user.
 This fixes failure F-04 from Week 2, where gemini-3.5-flash-lite computed
 three wrong reorder quantities (e.g. Erasers 70 instead of 63).
 
-THE FOUR TOOLS
---------------
+CORE PROCUREMENT TOOLS
+----------------------
+  0. get_restock_options()              -> full low-stock, purchase-history and supplier evidence
   1. get_low_stock()                     -> which items are at/below reorder point
   2. compare_supplier_quotes(item)       -> all quotes for one item, cheapest first
   3. estimate_reorder_quantity(item)     -> reorder quantity + full working + 200% cap
   4. draft_requisition(items)            -> builds a DRAFT requisition, saves it to
                                             data/state.sqlite3 (the only "side effect"),
                                             status always "DRAFT - AWAITING HUMAN APPROVAL"
-  5. plan_within_budget(items, budget)   -> (Week 5) which low items fit a budget, most urgent
-                                            first; the rest are "deferred" or "needs_human"
+  5. plan_within_budget(items, budget)   -> Python validates AI priorities/supplier selections,
+                                            recalculates the plan and enforces the budget
   6. get_inventory(category)            -> (MVP, US 1) stock levels, optionally for one category
   7. query_purchase_history(item, from, to) -> (MVP, US 6) past purchases + exact totals
 
@@ -47,7 +48,7 @@ The business rules here are the same ones written in prompts/procurement_assista
 (Section 4); the prompt v2.0.0 now tells the model to use these tools instead.
 
 Owner: Mwesigwa Arnold Mugahi (AI Engineering Lead)
-Version: 1.2.0 (MVP: get_inventory, query_purchase_history)
+Version: 1.3.0 (AI-led restock evidence and validated choices)
 """
 
 # ---------------------------------------------------------------------------
@@ -212,6 +213,34 @@ def _quotes_for(item_id: str, quote_rows: list[dict]) -> list[dict]:
     return quotes
 
 
+def _supplier_reason(quotes: list[dict], best: dict | None) -> str:
+    """
+    A human-readable explanation of WHY this supplier was chosen, built from the
+    numbers alone (never from a model's wording). Used on the approval screen so
+    the shop owner can see the reasoning behind every line.
+
+      1 quote   -> "Only one supplier quoted (X)."
+        >1 quote  -> selected supplier compared with the cheapest and fastest alternatives.
+      no quote  -> "No supplier has quoted this item - a quote is required."
+    """
+    if best is None:
+        return "No supplier has quoted this item - a quote is required before it can be costed."
+    if len(quotes) == 1:
+        return (f"Only one supplier quoted this item: {best['supplier_name']} at "
+                f"UGX {best['unit_price_ugx']:,} (delivers in {best['lead_time_days']} day(s)).")
+    cheapest = quotes[0]
+    fastest = min(quotes, key=lambda q: q["lead_time_days"])
+    if best["supplier_name"] == cheapest["supplier_name"]:
+        price_context = f"Lowest quoted price among {len(quotes)} suppliers."
+    else:
+        price_context = (f"UGX {best['unit_price_ugx']:,} vs cheapest "
+                         f"{cheapest['supplier_name']} at UGX {cheapest['unit_price_ugx']:,}.")
+    delivery_context = (f"Fastest option is {fastest['supplier_name']} at "
+                        f"{fastest['lead_time_days']} day(s).")
+    return (f"{best['supplier_name']} selected at UGX {best['unit_price_ugx']:,}; "
+            f"{price_context} Delivers in {best['lead_time_days']} day(s). {delivery_context}")
+
+
 def _history_for(item_id: str, history_rows: list[dict]) -> list[int]:
     """Monthly purchase quantities for one item, e.g. [24, 45, 27, ...]."""
     return [_int(r, "quantity_purchased", "past_purchases.csv")
@@ -309,6 +338,61 @@ def get_low_stock(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Restock options: gather the complete evidence the AI needs to decide
+# ---------------------------------------------------------------------------
+@_returns_errors_as_results
+def get_restock_options(tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+    """Return all low-stock items, exact demand calculations and every supplier option."""
+    inventory = _read_csv("current_stock.csv", tenant_id)
+    quote_rows = _read_csv("supplier_quotes.csv", tenant_id)
+    history_rows = _read_csv("past_purchases.csv", tenant_id)
+    items = []
+    for row in inventory:
+        quotes = _quotes_for(row["item_id"], quote_rows)
+        history = _history_for(row["item_id"], history_rows)
+        cheapest = quotes[0] if quotes else None
+        baseline = _reorder_calculation(row, history, cheapest)
+        if not baseline["is_low"]:
+            continue
+        options = []
+        for quote in quotes:
+            calculation = _reorder_calculation(row, history, quote)
+            options.append({
+                "supplier_name": quote["supplier_name"],
+                "unit_price_ugx": quote["unit_price_ugx"],
+                "min_order_qty": quote["min_order_qty"],
+                "lead_time_days": quote["lead_time_days"],
+                "recommended_qty": calculation["recommended_qty"],
+                "estimated_cost_ugx": calculation["recommended_qty"] * quote["unit_price_ugx"],
+                "quantity_basis": calculation["basis"],
+                "requires_override": calculation["requires_override"],
+                "safety_cap": calculation["safety_cap"],
+            })
+        items.append({
+            "item_id": baseline["item_id"],
+            "item_name": baseline["item_name"],
+            "current_stock": baseline["current_stock"],
+            "reorder_point": baseline["reorder_point"],
+            "months_of_history": baseline["months_of_history"],
+            "avg_monthly_purchases": baseline["avg_monthly_purchases"],
+            "quantity_basis": baseline["basis"],
+            "supplier_options": options,
+            "needs_human": not history or not quotes or baseline["recommended_qty"] == 0,
+            "human_reason": (
+                "No purchase history - human must set quantity" if not history else
+                "No supplier quote - quote required" if not quotes else
+                "Calculated quantity is zero - human must decide whether to reorder"),
+        })
+    return {
+        "count": len(items),
+        "items": items,
+        "total_items_in_inventory": len(inventory),
+        "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
+        "note": "Quantities and costs are calculated by Python; the AI chooses priorities and supplier options.",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tool 2: compare_supplier_quotes
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
@@ -358,7 +442,10 @@ def estimate_reorder_quantity(item: str, tenant_id: str = DEFAULT_TENANT_ID) -> 
 @_returns_errors_as_results
 def draft_requisition(items: list[str], created_by: str = "unknown",
                       tenant_id: str = DEFAULT_TENANT_ID,
-                      user_id: str = DEFAULT_USER_ID) -> dict:
+                      user_id: str = DEFAULT_USER_ID,
+                      supplier_choices: dict[str, str] | None = None,
+                      supplier_reasons: dict[str, str] | None = None,
+                      selection_rationale: str = "") -> dict:
     """
     Build a DRAFT purchase requisition for the given items and save it.
 
@@ -367,6 +454,9 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
                 NEVER by the model (so the AI cannot claim to be someone else).
     tenant_id   trusted shop scope injected by the application, never by the model.
     user_id     trusted user scope injected by the application, never by the model.
+    supplier_choices  optional model-selected supplier names, validated against current quotes.
+    supplier_reasons  concise, evidence-based explanation for the model's supplier choices.
+    selection_rationale  concise summary of the model's prioritization criteria.
 
     Rules applied:
       - only LOW items get a line; well-stocked items go to "skipped" with the reason
@@ -395,10 +485,19 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
             rows.append(row)
 
     # --- build one line per low item ---
+    supplier_choices = {} if supplier_choices is None else supplier_choices
+    supplier_reasons = {} if supplier_reasons is None else supplier_reasons
+    _validate_selection_text(supplier_choices, supplier_reasons, selection_rationale, seen)
     lines, skipped = [], []
     for row in rows:
         quotes = _quotes_for(row["item_id"], quote_rows)
-        best = quotes[0] if quotes else None
+        chosen_name = supplier_choices.get(row["item_id"])
+        best = next((quote for quote in quotes if quote["supplier_name"] == chosen_name), None)
+        if chosen_name and best is None:
+            raise ToolError("INVALID_PARAMETER",
+                            f"supplier '{chosen_name}' did not quote {row['item_id']}")
+        if not chosen_name:
+            best = quotes[0] if quotes else None
         calc = _reorder_calculation(row, _history_for(row["item_id"], history_rows), best)
         if not calc["is_low"]:
             skipped.append({"item_id": row["item_id"], "item_name": row["item_name"],
@@ -417,6 +516,13 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
             "min_order_qty": best["min_order_qty"] if best else 0,
             "lead_time_days": best["lead_time_days"] if best else 0,
             "total_cost_ugx": calc["recommended_qty"] * unit_price,   # exact integer maths
+            "supplier_reason": _supplier_reason(quotes, best),
+            "ai_supplier_rationale": supplier_reasons.get(row["item_id"], ""),
+            "supplier_options": [{"supplier_name": quote["supplier_name"],
+                                  "unit_price_ugx": quote["unit_price_ugx"],
+                                  "min_order_qty": quote["min_order_qty"],
+                                  "lead_time_days": quote["lead_time_days"]}
+                                 for quote in quotes],
             "requires_override": calc["requires_override"],
             "override_reason": calc["override_reason"],
             "safety_cap": calc["safety_cap"],        # kept so a human edit can be re-checked (approvals.py)
@@ -445,6 +551,7 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
         "estimated_budget_ugx": total,
         "budget_range_ugx": budget_range,
         "requires_override_any": any(line["requires_override"] for line in lines),
+        "ai_selection_rationale": selection_rationale,
         "decision": None,       # filled in later ONLY by a human via src/approvals.py
         "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
     }
@@ -459,12 +566,19 @@ def draft_requisition(items: list[str], created_by: str = "unknown",
 # ---------------------------------------------------------------------------
 @_returns_errors_as_results
 def plan_within_budget(items: list[str], budget_ugx: int | None = None,
-                       tenant_id: str = DEFAULT_TENANT_ID) -> dict:
+                       tenant_id: str = DEFAULT_TENANT_ID,
+                       priority_order: list[str] | None = None,
+                       supplier_choices: dict[str, str] | None = None,
+                       supplier_reasons: dict[str, str] | None = None,
+                       priority_rationale: str = "") -> dict:
     """
-    Decide which low items fit a budget, most urgent first. Read-only (no file is written).
+    Validate the AI's proposed priority and supplier selections, then cost them exactly.
+    If no AI choices are supplied, retain the original urgency-first planning rule.
 
     items       item IDs or names to consider (normally every low item from get_low_stock)
     budget_ugx  spending limit in UGX; None means "no limit"
+    priority_order  AI's explicit order of item IDs; must contain every requested item once.
+    supplier_choices  AI-selected supplier name for every costable item.
 
     How it decides (all deterministic, so a reviewer can predict the answer):
       1. Each item is costed exactly like draft_requisition would (quantity x cheapest price).
@@ -488,13 +602,44 @@ def plan_within_budget(items: list[str], budget_ugx: int | None = None,
     history_rows = _read_csv("past_purchases.csv", tenant_id)
 
     candidates, needs_human, not_low, seen = [], [], [], set()
+    supplier_choices = {} if supplier_choices is None else supplier_choices
+    supplier_reasons = {} if supplier_reasons is None else supplier_reasons
+    requested_ids = []
+    resolved_rows = []
     for ref in items:
         row = _resolve_item(ref, inventory)
         if row["item_id"] in seen:                     # ignore duplicates
             continue
         seen.add(row["item_id"])
+        requested_ids.append(row["item_id"])
+        resolved_rows.append(row)
+
+    ai_selected = priority_order is not None or bool(supplier_choices)
+    if priority_order is not None:
+        if not isinstance(priority_order, list) or not all(isinstance(item, str) for item in priority_order):
+            raise ToolError("INVALID_PARAMETER", "priority_order must be a list of item ID strings")
+        if (len(priority_order) != len(requested_ids)
+                or set(priority_order) != set(requested_ids)):
+            raise ToolError("INVALID_PARAMETER",
+                            "priority_order must contain every requested item ID exactly once")
+        requested_ids = list(priority_order)
+    if not isinstance(priority_rationale, str) or len(priority_rationale) > 500:
+        raise ToolError("INVALID_PARAMETER", "priority_rationale must be text of at most 500 characters")
+    if priority_order is not None and not priority_rationale.strip():
+        raise ToolError("INVALID_PARAMETER", "AI priority_rationale is required with priority_order")
+    _validate_selection_text(supplier_choices, supplier_reasons, priority_rationale, seen)
+
+    rows_by_id = {row["item_id"]: row for row in resolved_rows}
+    for item_id in requested_ids:
+        row = rows_by_id[item_id]
         quotes = _quotes_for(row["item_id"], quote_rows)
-        best = quotes[0] if quotes else None
+        chosen_name = supplier_choices.get(row["item_id"])
+        best = next((quote for quote in quotes if quote["supplier_name"] == chosen_name), None)
+        if chosen_name and best is None:
+            raise ToolError("INVALID_PARAMETER",
+                            f"supplier '{chosen_name}' did not quote {row['item_id']}")
+        if not chosen_name:
+            best = quotes[0] if quotes else None
         calc = _reorder_calculation(row, _history_for(row["item_id"], history_rows), best)
         if not calc["is_low"]:
             not_low.append({"item_id": calc["item_id"], "item_name": calc["item_name"],
@@ -503,20 +648,43 @@ def plan_within_budget(items: list[str], budget_ugx: int | None = None,
         if calc["recommended_qty"] == 0 or best is None:
             # Cannot be costed: no history (human must set qty) or no quote (quote required).
             needs_human.append({"item_id": calc["item_id"], "item_name": calc["item_name"],
+                                "current_stock": calc["current_stock"],
+                                "reorder_point": calc["reorder_point"],
+                                "months_of_history": calc["months_of_history"],
                                 "reason": calc["basis"] if best else "No supplier quote - quote required"})
             continue
+        if ai_selected and not chosen_name:
+            raise ToolError("INVALID_PARAMETER",
+                            f"AI supplier choice is required for costable item {row['item_id']}")
+        if ai_selected and not supplier_reasons.get(row["item_id"], "").strip():
+            raise ToolError("INVALID_PARAMETER",
+                            f"AI supplier rationale is required for costable item {row['item_id']}")
+        quote_options = [{
+            "supplier_name": quote["supplier_name"],
+            "unit_price_ugx": quote["unit_price_ugx"],
+            "min_order_qty": quote["min_order_qty"],
+            "lead_time_days": quote["lead_time_days"],
+        } for quote in quotes]
         candidates.append({
             "item_id": calc["item_id"],
             "item_name": calc["item_name"],
             "recommended_qty": calc["recommended_qty"],
             "selected_supplier": best["supplier_name"],
+            "unit_price_ugx": best["unit_price_ugx"],
+            "lead_time_days": best["lead_time_days"],
+            "min_order_qty": best["min_order_qty"],
             "cost_ugx": calc["recommended_qty"] * best["unit_price_ugx"],
+            "supplier_reason": _supplier_reason(quotes, best),   # why THIS supplier (AC 7.3)
+            "selection_reason": supplier_reasons.get(row["item_id"], ""),
+            "supplier_options": quote_options,
+            "quantity_basis": calc["basis"],
             # Fraction keeps the ratio exact for sorting; rounded copy is for display.
             "_urgency": Fraction(calc["current_stock"], calc["reorder_point"]) if calc["reorder_point"] else Fraction(0),
             "requires_override": calc["requires_override"],
         })
 
-    candidates.sort(key=lambda c: (c["_urgency"], c["item_id"]))   # most urgent first
+    if priority_order is None:
+        candidates.sort(key=lambda c: (c["_urgency"], c["item_id"]))
 
     included, deferred, running = [], [], 0
     for c in candidates:
@@ -537,9 +705,28 @@ def plan_within_budget(items: list[str], budget_ugx: int | None = None,
         "deferred": deferred,           # tell the human: did not fit the budget
         "needs_human": needs_human,     # tell the human: cannot be costed automatically
         "not_low": not_low,
-        "rule": "most urgent first (stock/reorder_point), skip items that do not fit and continue",
+        "rule": ("AI priority order, skip items that do not fit and continue"
+                 if priority_order is not None
+                 else "most urgent first (stock/reorder_point), skip items that do not fit and continue"),
+        "priority_rationale": priority_rationale,
         "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv",
     }
+
+
+def _validate_selection_text(supplier_choices: dict, supplier_reasons: dict,
+                             rationale: str, valid_item_ids: set[str]) -> None:
+    """Validate model-provided selections and explanations without trusting them as facts."""
+    if not isinstance(supplier_choices, dict) or not isinstance(supplier_reasons, dict):
+        raise ToolError("INVALID_PARAMETER", "supplier choices and reasons must be objects")
+    if not isinstance(rationale, str) or len(rationale) > 500:
+        raise ToolError("INVALID_PARAMETER", "selection rationale must be text of at most 500 characters")
+    for mapping, label in ((supplier_choices, "supplier_choices"),
+                           (supplier_reasons, "supplier_reasons")):
+        if not set(mapping).issubset(valid_item_ids):
+            raise ToolError("INVALID_PARAMETER", f"{label} contains an unknown item ID")
+        if any(not isinstance(value, str) or not value.strip() or len(value) > 500
+               for value in mapping.values()):
+            raise ToolError("INVALID_PARAMETER", f"{label} values must be non-empty text of at most 500 characters")
 
 
 # ---------------------------------------------------------------------------

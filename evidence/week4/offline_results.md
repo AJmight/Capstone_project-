@@ -1,10 +1,12 @@
 # Week 4 Offline Tool Tests
 
-Run at 2026-10-24T15:42:13 | **22/22 passed**
+Run at 2026-10-29T11:59:49 | **24/24 passed**
 
 | id | test | passed | detail |
 |---|---|---|---|
 | O-01 | get_low_stock returns exactly the items with stock <= reorder point. | **PASS** |  |
+| O-01b | The AI receives per-quote quantities and costs, while all calculations remain exact. | **PASS** |  |
+| O-01c | A verified AI supplier choice is costed by Python and retained in the saved draft. | **PASS** |  |
 | O-02 | estimate_reorder_quantity matches the independent formula for every low item (F-04). | **PASS** |  |
 | O-03 | The three quantities gemini-3.5-flash-lite got wrong in Week 2 are now exact. | **PASS** |  |
 | O-04 | A4 Exercise Books (stock 45 > 10) is never recommended (Week 2 TC-06 problem). | **PASS** |  |

@@ -1,5 +1,5 @@
 """
-Weekly Restock Agent - the Week 5 bounded, goal-directed agent.
+Weekly Restock Agent - the AI-led Week 5 bounded, goal-directed agent.
 ===============================================================
 
 THE GOAL (one task that genuinely needs several decisions)
@@ -15,7 +15,7 @@ docs/requirements/agent-task-contract.md.
 THE LOOP (Sense -> Plan/Decide -> Act -> Observe -> Stop/Re-plan)
 -----------------------------------------------------------------
   0. PRECONDITIONS  (code)  budget a positive whole number?
-  1. SENSE          (code)  get_low_stock through the registry -> state.low_items
+  1. SENSE          (code)  get_restock_options through the registry -> evidence for AI choices
                             nothing low -> stop NOTHING_TO_DO (no model call needed)
   2. PLAN / DECIDE  (model) reads the goal + SENSE block, chooses the next tool
   3. ACT            (code)  registry runs the tool (allow-list, argument validation)
@@ -32,10 +32,10 @@ THE LOOP (Sense -> Plan/Decide -> Act -> Observe -> Stop/Re-plan)
 
 WHO DECIDES WHAT
 ----------------
-  Python decides: what is low, every quantity/price/total, which items fit the budget
-                  (plan_within_budget), the limits, and the final outcome.
-  The model decides: which approved tool to call next, how to react to failures, and how
-                  to explain the result to the human.
+  Python decides: what is low; every quantity, price and total; whether supplier/item choices
+                  match real records; whether the budget is met; the limits and final outcome.
+  The model decides: the priority order, supplier trade-offs, which approved tool to call next,
+                  how to react to evidence/failures, and how to explain its recommendation.
   The human decides: approve or reject the draft (src/approvals.py), the quantities of
                   "needs_human" items, and whether to fund deferred items.
 
@@ -74,7 +74,7 @@ from tool_agent import run_agent              # the bounded model <-> tool loop 
 # ---------------------------------------------------------------------------
 GOAL = ("Prepare ONE draft restock requisition within the budget and report everything that "
         "needs a human decision.")
-CONTRACT_TOOLS = {"get_low_stock", "plan_within_budget", "draft_requisition"}   # task allow-list
+CONTRACT_TOOLS = {"plan_within_budget", "draft_requisition"}   # read/plan/write allow-list
 MAX_TURNS = int(os.getenv("RESTOCK_AGENT_MAX_TURNS", "5"))          # allows one recovery plus draft verification
 MAX_TOOL_CALLS = int(os.getenv("RESTOCK_AGENT_MAX_TOOL_CALLS", "8"))  # bounded plan/retry/draft budget
 
@@ -100,7 +100,8 @@ class AgentState:
     budget_ugx: int
     user_name: str
     phase: str = "START"                                  # START, SENSE, PLAN, DECIDE, ACT, OBSERVE, STOP
-    low_items: list = field(default_factory=list)         # from SENSE (get_low_stock)
+    low_items: list = field(default_factory=list)         # low items extracted from tool evidence
+    restock_options: dict = field(default_factory=dict)   # exact per-supplier evidence for AI decisions
     plan: dict | None = None                              # last successful plan_within_budget result
     draft: dict | None = None                             # the draft_requisition result, if any
     drafts_created: list = field(default_factory=list)    # every draft ID (post-condition: at most 1)
@@ -148,7 +149,7 @@ class AgentState:
             # formatting None with :, would crash the whole run, so print it as words instead.
             limit = (f"UGX {result['budget_ugx']:,}" if result.get("budget_ugx") is not None
                      else "no budget limit")
-            self.log("OBSERVE", f"plan: include {inc} = UGX {result['planned_total_ugx']:,} of "
+            self.log("OBSERVE",             f"AI-proposed plan: include {inc} = UGX {result['planned_total_ugx']:,} of "
                                 f"{limit}; deferred "
                                 f"{[d['item_id'] for d in result['deferred']]}; needs human "
                                 f"{[h['item_id'] for h in result['needs_human']]}")
@@ -195,6 +196,22 @@ def check_postconditions(state: AgentState, final_text: str) -> list[dict]:
         add("draft items == plan 'included' items", drafted == planned, f"draft {drafted} vs plan {planned}")
         add("draft total within budget", d["estimated_budget_ugx"] <= state.budget_ugx,
             f"UGX {d['estimated_budget_ugx']:,} <= UGX {state.budget_ugx:,}")
+        planned_suppliers = {i["item_id"]: i["selected_supplier"]
+                             for i in (state.plan or {}).get("included", [])}
+        actual_suppliers = {i["item_id"]: i["selected_supplier"] for i in d["lines"]}
+        add("draft suppliers match AI plan", actual_suppliers == planned_suppliers,
+            f"draft {actual_suppliers} vs plan {planned_suppliers}")
+        planned_total = (state.plan or {}).get("planned_total_ugx")
+        add("draft total matches validated plan", d["estimated_budget_ugx"] == planned_total,
+            f"draft UGX {d['estimated_budget_ugx']:,} vs plan UGX {planned_total:,}")
+        planned_reasons = {i["item_id"]: i.get("selection_reason", "")
+                           for i in (state.plan or {}).get("included", [])}
+        draft_reasons = {i["item_id"]: i.get("ai_supplier_rationale", "") for i in d["lines"]}
+        add("AI supplier rationales match validated plan", draft_reasons == planned_reasons,
+            f"draft rationale keys {sorted(draft_reasons)} vs plan {sorted(planned_reasons)}")
+        planned_rationale = (state.plan or {}).get("priority_rationale", "")
+        add("AI priority rationale preserved", d.get("ai_selection_rationale") == planned_rationale,
+            "draft and validated plan carry the same rationale")
         add("draft status is DRAFT", d["status"] == procurement.DRAFT_STATUS, d["status"])
         add("summary says it awaits human approval", "AWAITING HUMAN APPROVAL" in final_text.upper(),
             "status line present" if "AWAITING HUMAN APPROVAL" in final_text.upper() else "status line missing")
@@ -222,110 +239,6 @@ def _handoffs(state: AgentState) -> list[str]:
 # ---------------------------------------------------------------------------
 # Deterministic fallback (no model call) - used when every model is out of quota
 # ---------------------------------------------------------------------------
-def _deterministic_fallback(state: AgentState, budget_ugx: int, user_name: str,
-                            tenant_id: str, user_id: str) -> dict:
-    """
-    Build the restock plan + draft using ONLY the deterministic tools, when the
-    model loop could not run (all models 429 / unavailable).
-
-    Mirrors what a successful model run would have produced:
-      1. plan_within_budget over the low items already sensed (most urgent first)
-      2. draft_requisition over exactly the included items
-      3. a human-readable summary that lists deferred / needs-human items
-
-    Every figure comes from Python; nothing is guessed. The returned dict has the
-    same shape as run_agent()'s output (run_id, final_text, stopped_reason, steps,
-    tool_calls, models_used, latency_s, drafts_created) so the rest of run_restock
-    can treat it identically.
-    """
-    from tools import registry
-
-    context = {"created_by": user_name, "tenant_id": tenant_id, "user_id": user_id}
-    steps, tool_calls = [], []
-    drafts_created = []
-
-    # 1. plan_within_budget over the sensed low items.
-    plan, status = registry.execute_tool("plan_within_budget", {
-        "items": [i["item_id"] for i in state.low_items], "budget_ugx": budget_ugx},
-        context=context, run_id="fallback_plan")
-    tool_calls.append({"turn": 1, "name": "plan_within_budget",
-                       "args": {"items": [i["item_id"] for i in state.low_items],
-                                "budget_ugx": budget_ugx}, "status": status,
-                       "result": plan})
-    state.observe("plan_within_budget",
-                  {"items": [i["item_id"] for i in state.low_items], "budget_ugx": budget_ugx},
-                  plan, status, 1, "fallback", "")
-
-    if status != "ok" or not plan.get("included"):
-        # Nothing fits / cannot be costed -> the contract says do NOT draft.
-        needs = plan.get("needs_human", []) if isinstance(plan, dict) else []
-        deferred = plan.get("deferred", []) if isinstance(plan, dict) else []
-        parts = []
-        for h in needs:
-            parts.append(f"- **{h['item_id']}** {h['item_name']}: {h['reason']}")
-        for d in deferred:
-            parts.append(f"- **{d['item_id']}** {d['item_name']}: deferred - {d['reason']}")
-        final_text = (
-            f"No requisition was created because nothing priced fits the budget of "
-            f"UGX {budget_ugx:,} (source: plan_within_budget).\n\n")
-        if parts:
-            final_text += "**Needs your decision:**\n" + "\n".join(parts) + "\n\n"
-        final_text += "No requisition was created."
-        steps.append({"turn": 1, "model": "deterministic-fallback", "model_text": final_text,
-                      "tool_requests": []})
-        return {"run_id": "fallback", "final_text": final_text, "stopped_reason": "model_finished",
-                "turns_used": 1, "steps": steps, "tool_calls": tool_calls,
-                "models_used": ["deterministic-fallback"], "latency_s": 0.0,
-                "drafts_created": drafts_created, "output_warnings": []}
-
-    # 2. draft_requisition over exactly the included items.
-    draft, dstatus = registry.execute_tool("draft_requisition", {
-        "items": [i["item_id"] for i in plan["included"]]}, context=context,
-        run_id="fallback_draft")
-    tool_calls.append({"turn": 1, "name": "draft_requisition",
-                       "args": {"items": [i["item_id"] for i in plan["included"]]},
-                       "status": dstatus, "result": draft})
-    state.observe("draft_requisition",
-                  {"items": [i["item_id"] for i in plan["included"]]},
-                  draft, dstatus, 1, "fallback", "")
-
-    if dstatus == "ok" and draft.get("draft_id"):
-        drafts_created.append(draft["draft_id"])
-
-    # 3. Human-readable summary built from the STATE, not from a model.
-    lines = [f"**Draft:** `{draft.get('draft_id')}`" ] if draft.get("draft_id") else []
-    for line in draft.get("lines", []):
-        lines.append(
-            f"- **{line['item_name']} ({line['item_id']}):** {line['recommended_qty']} units | "
-            f"Supplier: {line.get('selected_supplier', '—')} | "
-            f"Total: UGX {line.get('total_cost_ugx', 0):,} (source: draft_requisition)")
-    lines.append(
-        f"**Total vs Budget:** UGX {plan.get('planned_total_ugx', 0):,} spent of "
-        f"UGX {budget_ugx:,} budget"
-        + (f" (UGX {plan.get('remaining_budget_ugx', 0):,} remaining)"
-           if plan.get("remaining_budget_ugx") is not None else "")
-        + " (source: plan_within_budget, draft_requisition)")
-    for d in plan.get("deferred", []):
-        lines.append(
-            f"- **Deferred:** **{d['item_id']}** {d['item_name']}: {d['reason']}")
-    for h in plan.get("needs_human", []):
-        lines.append(
-            f"- **Needs your decision:** **{h['item_id']}** {h['item_name']}: {h['reason']}")
-    lines.append(
-        f"Status: {procurement.DRAFT_STATUS}. A manager must review and approve it.")
-
-    final_text = (
-        "The AI assistant was unavailable (all models out of quota), so this plan was built "
-        "deterministically from your own records with no model call. Every figure below comes "
-        "from plan_within_budget and draft_requisition.\n\n" + "\n".join(lines))
-    steps.append({"turn": 1, "model": "deterministic-fallback", "model_text": final_text,
-                  "tool_requests": []})
-    return {"run_id": "fallback", "final_text": final_text, "stopped_reason": "model_finished",
-            "turns_used": 1, "steps": steps, "tool_calls": tool_calls,
-            "models_used": ["deterministic-fallback"], "latency_s": 0.0,
-            "drafts_created": drafts_created, "output_warnings": []}
-
-
 # ---------------------------------------------------------------------------
 # The agent run
 # ---------------------------------------------------------------------------
@@ -370,7 +283,7 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
             except Exception:
                 pass
 
-        sense, status = execute_tool("get_low_stock", {},
+        sense, status = execute_tool("get_restock_options", {},
                                      context={"tenant_id": tenant_id}, run_id="sense")
         if "error" in sense:
             state.log("SENSE", f"failed: {sense['error']}")
@@ -382,8 +295,14 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                 except Exception:
                     pass
         else:
-            state.low_items = sense["items"]
-            state.log("SENSE", f"{sense['count']} low items: {[i['item_id'] for i in sense['items']]}")
+            state.restock_options = sense
+            state.low_items = [
+                {"item_id": item["item_id"], "item_name": item["item_name"],
+                 "current_stock": item["current_stock"], "reorder_point": item["reorder_point"]}
+                for item in sense["items"]
+            ]
+            state.log("SENSE", f"{sense['count']} low items with full quote/history options: "
+                               f"{[i['item_id'] for i in state.low_items]}")
             if state_mgr and session:
                 try:
                     state_mgr.update_session(session.session_id, low_stock_count=len(state.low_items))
@@ -419,16 +338,12 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                 pass
 
         # ---- 2-4. PLAN/DECIDE -> ACT -> OBSERVE loop (model + registry) ----
-        # The model decides WHICH tool to call next; Python decides every figure.
-        # If every model is out of quota (429) the loop stops with
-        # stopped_reason="model_unavailable" and NO draft is created. That is a
-        # dead end for the shop owner, so the run falls back to a deterministic
-        # plan built from the SAME tools (plan_within_budget + draft_requisition)
-        # - see _deterministic_fallback(). The fallback is not a "model call in
-        # disguise": it never reaches the network, it never invents a quantity,
-        # and the outcome is still decided by code (DRAFT_READY / NOTHING_FITS_BUDGET).
+        # The model receives complete, tool-computed options, then chooses
+        # priorities and supplier trade-offs. Python validates the choices and
+        # recomputes quantities, prices and budget fit before any draft is saved.
         message = (f"[RESTOCK TASK]\nGoal: {GOAL}\nBudget: UGX {budget_ugx:,} (budget_ugx={budget_ugx})\n"
-                   f"Requested by: {user_name}\n\n[SENSE]\n" + json.dumps(state.low_items, indent=1))
+                   f"Requested by: {user_name}\n\n[SENSE]\n" +
+                   json.dumps(state.restock_options, indent=1))
         if mem_prompt:
             message += f"\n\n{mem_prompt}"
 
@@ -441,9 +356,6 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
             _close_run_managers(state_mgr, mem_mgr)
             raise
 
-        if run["stopped_reason"] == "model_unavailable":
-            state.log("RE-PLAN", "all models out of quota -> deterministic fallback (no model call)")
-            run = _deterministic_fallback(state, budget_ugx, user_name, tenant_id, user_id)
         final_text = run["final_text"]
         if run["steps"] and not run["steps"][-1]["tool_requests"]:
             state.log("PLAN/DECIDE", f"turn {run['steps'][-1]['turn']} ({run['steps'][-1]['model']}) "
@@ -499,10 +411,16 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                 except Exception:
                     pass
         elif state.plan is not None and not state.plan["included"]:
-            state.outcome = "NOTHING_FITS_BUDGET"
+            state.outcome = ("NOTHING_FITS_BUDGET" if state.plan.get("deferred")
+                             else "NEEDS_HUMAN" if state.plan.get("needs_human")
+                             else "NOTHING_FITS_BUDGET")
             if state_mgr and session:
                 try:
-                    state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED, "Budget insufficient")
+                    state_mgr.transition_to(
+                        session.session_id, WorkflowStage.TERMINATED,
+                        "Budget insufficient" if state.plan.get("deferred")
+                        else "Human input required" if state.plan.get("needs_human")
+                        else "Budget insufficient")
                 except Exception:
                     pass
         else:

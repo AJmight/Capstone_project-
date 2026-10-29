@@ -54,6 +54,7 @@ PERMISSION_DRAFT_WRITE = "draft_write"
 PERMISSION_ADMIN_APPROVAL = "admin_approval"
 
 TOOL_PERMISSIONS: Dict[str, str] = {
+    "get_restock_options": PERMISSION_READ_ONLY,
     "get_low_stock": PERMISSION_READ_ONLY,
     "compare_supplier_quotes": PERMISSION_READ_ONLY,
     "estimate_reorder_quantity": PERMISSION_READ_ONLY,

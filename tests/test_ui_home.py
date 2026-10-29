@@ -8,9 +8,10 @@ Streamlit ships a headless test runner, streamlit.testing.v1.AppTest. It runs th
 script in-process (no browser, no server, no GEMINI_API_KEY) and lets the test read the
 elements on the page and click buttons, the same way a person would.
 
-  UI-01..15  business selection, route/session safety, stock CRUD, sales, purchases,
+  UI-01..16  business selection, route/session safety, stock CRUD, sales, purchases,
              quotes, policy editing/Q&A, bounded chat context, restock-to-approval,
-             human quantity edits, approval state and tenant isolation.
+             human quantity edits, approval state and tenant isolation, and
+             restock questions routed through run_restock (with the fallback) in chat.
 
 SANDBOX
 -------
@@ -32,11 +33,13 @@ import os
 import sys
 import tempfile
 import traceback
+from functools import wraps
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tests"))
 
 from streamlit.testing.v1 import AppTest       # Streamlit's headless app runner
 
@@ -45,6 +48,8 @@ import approvals
 import memory as memory_module
 import state as state_module
 import tool_agent
+import restock_agent as restock_agent_mod
+from test_week5_agent import fake_model, ideal_policy
 import tenant_context                          # to sandbox business folders
 from conversation_context import (COPILOT_RECENT_TURNS, COPILOT_SUMMARY_LIMIT,
                                   build_copilot_context, compact_copilot_turn)
@@ -69,6 +74,15 @@ def fresh_app() -> AppTest:
     at = AppTest.from_file(str(APP), default_timeout=30)
     at.run()
     return at
+
+
+def fake_restock_ai(test_function):
+    """Run UI restock workflows against the scripted model, never a live API."""
+    @wraps(test_function)
+    def wrapped(*args, **kwargs):
+        with fake_model(ideal_policy):
+            return test_function(*args, **kwargs)
+    return wrapped
 
 
 def open_business(at: AppTest, name: str) -> str:
@@ -278,20 +292,20 @@ def test_ui11_operations_record_sales_purchases_and_quotes():
     assert not at.exception, at.exception
 
 
+@fake_restock_ai
 def test_ui12_restocks_create_a_session_and_open_approvals_automatically():
     at = fresh_app()
     tenant_id = open_business(at, "UI Restock Session Flow")
     seed_one_low_item(tenant_id)
     go_to_page(at, "Restock AI")
-    assert at.radio(key=f"restock_method_{tenant_id}").value == "Quick deterministic plan"
     at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
-    next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
+    next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     assert not at.exception, at.exception
     assert at.session_state["workspace_page"] == "Approvals", (
         f"a saved draft should open the review queue; got {at.session_state['workspace_page']}; "
         f"errors={[e.value for e in at.error]}; text={page_text(at)}")
     assert any("is ready here for your review" in success.value for success in at.success)
-    assert any("Read 1 low-stock items" in item.value for item in at.markdown)
+    assert any("1 low items with full quote/history options" in item.value for item in at.markdown)
     assert any("current_stock.csv" in item.value for item in at.markdown)
     pending = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     assert len(pending) == 1 and pending[0]["status"] == procurement.DRAFT_STATUS
@@ -306,56 +320,69 @@ def test_ui12_restocks_create_a_session_and_open_approvals_automatically():
     # A second run in the same browser must get a fresh workflow session and
     # leave the first pending draft untouched.
     go_to_page(at, "Restock AI")
-    next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
+    next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     assert not at.exception, at.exception
     pending = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     assert len(pending) == 2 and len({d["draft_id"] for d in pending}) == 2
 
 
-def test_ui13_approval_edit_and_decision_are_session_safe():
+@fake_restock_ai
+def test_ui13_approval_buttons_and_decision_are_session_safe():
+    """The Approvals screen shows one draft with the AI's reasoning and two big
+    buttons (Approve / Deny) plus a comments box; a reason is required to deny."""
     at = fresh_app()
     tenant_id = open_business(at, "UI Approval Flow")
     seed_one_low_item(tenant_id)
     go_to_page(at, "Restock AI")
     at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
-    next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
+    next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     draft_summary = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")[0]
     draft = approvals.load_draft(draft_summary["draft_id"], tenant_id, "default-user")
 
-    at.number_input(key=f"approval_qty_{tenant_id}").set_value(draft["lines"][0]["recommended_qty"] + 1)
-    at.text_input(key=f"approval_edit_reason_{tenant_id}").input("Increase for expected school demand")
-    next(b for b in at.form_submit_button if b.label == "Save quantity change").click().run()
-    assert not at.exception, at.exception
-    edited = approvals.load_draft(draft["draft_id"], tenant_id, "default-user")
-    assert edited["lines"][0]["ai_suggested_qty"] < edited["lines"][0]["recommended_qty"]
-    assert edited["lines"][0]["edits"][-1]["reason"] == "Increase for expected school demand"
+    # Verified calculations and concise AI decision rationale are both visible.
+    assert "Verified quote comparison" in page_text(at)
+    assert "AI's reason for this choice" in page_text(at)
+    assert draft["lines"][0]["selected_supplier"] in page_text(at)
 
-    at.selectbox(key=f"approval_decision_{tenant_id}").set_value("APPROVED")
-    at.text_input(key=f"approval_confirmation_{tenant_id}").input("APPROVED")
-    next(b for b in at.form_submit_button if b.label == "Record human decision").click().run()
+    # Approve with a comment.
+    at.text_area(key=f"approval_reason_{tenant_id}").input("Approved as suggested")
+    next(b for b in at.form_submit_button if b.label == "Approve draft").click().run()
     assert not at.exception, at.exception
     decided = approvals.load_draft(draft["draft_id"], tenant_id, "default-user")
     assert decided["status"] == "APPROVED"
     assert decided["decision"]["decided_by"] == "UI Approval Flow"
     assert at.session_state["workspace_page"] == "Approvals"
 
-    # A second draft can be rejected only after a human enters both the reason
-    # and the exact confirmation; the workflow then records REJECTED.
+    # A second draft can be denied only after a human enters a reason.
     go_to_page(at, "Restock AI")
-    next(b for b in at.form_submit_button if b.label == "Build restock draft").click().run()
+    next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     second = next(d for d in approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
                   if d["status"] == procurement.DRAFT_STATUS)
-    at.selectbox(key=f"approval_decision_{tenant_id}").set_value("REJECTED")
-    at.text_input(key=f"approval_confirmation_{tenant_id}").input("REJECTED")
-    next(b for b in at.form_submit_button if b.label == "Record human decision").click().run()
+    at.text_area(key=f"approval_reason_{tenant_id}").set_value("")
+    next(b for b in at.form_submit_button if b.label == "Reject draft").click().run()
     assert any("reason is required" in error.value.lower() for error in at.error)
     assert approvals.load_draft(second["draft_id"], tenant_id, "default-user")["status"] == procurement.DRAFT_STATUS
-    at.text_input(key=f"approval_reason_{tenant_id}").input("Supplier delivery is too late")
-    next(b for b in at.form_submit_button if b.label == "Record human decision").click().run()
+    at.text_area(key=f"approval_reason_{tenant_id}").input("Supplier delivery is too late")
+    next(b for b in at.form_submit_button if b.label == "Reject draft").click().run()
     assert not at.exception, at.exception
     rejected = approvals.load_draft(second["draft_id"], tenant_id, "default-user")
     assert rejected["status"] == "REJECTED"
     assert rejected["decision"]["reason"] == "Supplier delivery is too late"
+
+
+def test_ui17_model_outage_does_not_save_non_ai_draft():
+    """The Restock page shows an outage hand-off and leaves approvals unchanged."""
+    at = fresh_app()
+    tenant_id = open_business(at, "UI Restock Outage Shop")
+    seed_one_low_item(tenant_id)
+    go_to_page(at, "Restock AI")
+    at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
+    with fake_model(unavailable=True):
+        next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
+    assert not at.exception, at.exception
+    assert any("no draft was saved" in warning.value.lower() for warning in at.warning)
+    assert not approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
+    assert at.session_state["workspace_page"] == "Restock AI"
 
 
 def test_ui14_policy_edit_and_copilot_context_are_bounded_and_tenant_local():
@@ -404,12 +431,16 @@ def test_ui15_copilot_context_survives_turns_and_clears_on_shop_switch():
     def fake_agent(message, **kwargs):
         calls.append((message, kwargs["tenant_id"]))
         return {"final_text": "Two items are low; source: current_stock.csv.",
-                "latency_s": 0.03, "run_id": "mock-run"}
+                "latency_s": 0.03, "run_id": "mock-run",
+                "tool_calls": [{"name": "get_low_stock", "args": {},
+                                "status": "ok", "result": {"count": 2}}]}
 
     with patch.object(tool_agent, "run_agent", side_effect=fake_agent):
         at.chat_input[0].set_value("What is low in stock?")
         at.run()
         assert not at.exception, at.exception
+        assert "Get Low Stock" in page_text(at), "the chat should expose the evidence lookup"
+        assert at.session_state[f"copilot_history_{tenant_a}"][-1]["tool_calls"]
         at.chat_input[0].set_value("What source did you use?")
         at.run()
         assert not at.exception, at.exception
@@ -425,6 +456,7 @@ def test_ui15_copilot_context_survives_turns_and_clears_on_shop_switch():
         go_to_page(at, "Operations")
         at.text_input(key=f"new_stock_name_{tenant_a}").input("Unsaved item from shop A")
         next(b for b in at.button if b.label == "↔ Switch shop").click().run()
+
         tenant_b = open_business(at, "UI Chat Shop B")
         go_to_page(at, "Operations")
         assert at.text_input(key=f"new_stock_name_{tenant_b}").value == ""
@@ -432,8 +464,53 @@ def test_ui15_copilot_context_survives_turns_and_clears_on_shop_switch():
         at.chat_input[0].set_value("What is low in stock?")
         at.run()
         assert not at.exception, at.exception
+        assert "Get Low Stock" in page_text(at), "the chat should expose the evidence lookup"
+        assert at.session_state[f"copilot_history_{tenant_b}"][-1]["tool_calls"]
         assert "What source did you use?" not in calls[-1][0]
         assert calls[-1][1] == tenant_b
+
+
+@fake_restock_ai
+def test_ui16_copilot_restock_routes_through_the_ai_agent():
+    """Restock questions in chat use the agent and open its saved draft for human review."""
+    at = fresh_app()
+    tenant_id = open_business(at, "UI Restock Chat Shop")
+    restock_calls = []
+
+    def fake_restock(budget_ugx, **kwargs):
+        restock_calls.append((budget_ugx, kwargs["tenant_id"]))
+        return {"final_text": "Draft D-001 is saved by the AI agent.",
+                "drafts_created": ["D-001"], "latency_s": 0.0, "run_id": "test-run",
+                "state": {"drafts_created": ["D-001"], "timeline": [], "plan": None}}
+
+    with patch.object(restock_agent_mod, "run_restock", side_effect=fake_restock):
+        at.chat_input[0].set_value("Plan a restock under UGX 300,000")
+        at.run()
+        assert not at.exception, at.exception
+        assert len(restock_calls) == 1, restock_calls
+        assert restock_calls[0][0] == 300000
+        assert restock_calls[0][1] == tenant_id
+        # The answer is saved to the chat history before the redirect to Approvals.
+        history = at.session_state.get(f"copilot_history_{tenant_id}", [])
+        print("HISTORY1:", history)
+        print("PAGE:", at.session_state.get("workspace_page"))
+        assert any("Draft D-001 is saved by the AI agent" in turn.get("answer", "") for turn in history), history
+        # _next_workspace_page is consumed by the rerun that follows, so the
+        # observable result is that the Approvals page is now active.
+        assert at.session_state.get("workspace_page") == "Approvals", at.session_state.get("workspace_page")
+
+    # A normal question still goes through the tool agent, not run_restock.
+    go_to_page(at, "Dashboard")
+    with patch.object(tool_agent, "run_agent", return_value={
+            "final_text": "Blue exercise books are low.", "latency_s": 0.1,
+            "run_id": "agent-run"}):
+        at.chat_input[0].set_value("Which items are low on stock?")
+        at.run()
+        assert not at.exception, at.exception
+        assert len(restock_calls) == 1, restock_calls
+        history = at.session_state.get(f"copilot_history_{tenant_id}", [])
+        print("HISTORY2:", history)
+        assert any("Blue exercise books are low" in turn.get("answer", "") for turn in history), history
 
 
 def test_ui09_policy_documents_are_editable_and_isolated():

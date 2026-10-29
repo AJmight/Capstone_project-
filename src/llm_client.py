@@ -1,5 +1,5 @@
 """
-Shared Gemini client with automatic model fallback.
+Shared Gemini-first client with optional Groq Llama fallback.
 ===================================================
 
 WHY THIS FILE EXISTS
@@ -10,19 +10,13 @@ instead of being copy-pasted into every script.
 
 THE FALLBACK POLICY
 -------------------
-  1. Try the primary model (GEMINI_PRIMARY_MODEL in .env, default gemini-3.8-flash).
-  2. On ANY availability failure (503 busy, 429 quota, 5xx, timeout, network
-     drop, 404 model not found) switch IMMEDIATELY to the next configured model,
-     up to LLM_MAX_MODEL_ATTEMPTS per call. All models share the same
-     GEMINI_API_KEY, but Google counts the free-tier quota (20 requests/day)
-     separately for each model, so a chain of models multiplies our capacity.
-     (gemini-2.5-flash is NOT used: Google returns 404 "no longer available to
-     new users" for our key.)
-  3. If every model fails, another round is optional (LLM_MAX_ROUNDS, default 1).
-     A model whose DAILY quota is exhausted, or that
-     returned 404, is skipped in later rounds because retrying cannot help.
-  4. Errors that a different model cannot fix (bad API key, malformed request)
-     are raised straight away so the developer sees them.
+  1. Try Gemini first for every new user request.
+  2. When GROQ_API_KEY is configured, send the same bounded conversation and
+     tool history to Groq Llama after a retryable Gemini outage/quota failure.
+  3. Other configured Gemini models remain after Groq in the fallback chain.
+     The next user request starts with Gemini again, so recovery is automatic.
+  4. Errors that another provider cannot fix (for example, a bad Gemini key or
+     malformed request) are raised so the developer can correct configuration.
 
 WHO CALLS WHAT
 --------------
@@ -51,6 +45,7 @@ import time                                   # measure latency and wait between
 from dataclasses import dataclass, field      # simple result container (LLMResult)
 from datetime import datetime, timezone       # timestamps for the trace file
 from pathlib import Path                      # file paths that work on Windows and Linux
+from types import SimpleNamespace             # small history adapter for provider fallback
 from typing import Any, Callable              # type hints for the generic helper
 
 import httpx                                  # the HTTP library the Gemini SDK uses (network errors)
@@ -65,6 +60,10 @@ load_dotenv()
 # Settings (all come from .env; see .env.example for the full list)
 # ---------------------------------------------------------------------------
 API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL_ID = f"groq:{GROQ_MODEL}"
+GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Primary model. MODEL_NAME is the old Week 2 variable name, kept so old .env files still work.
 PRIMARY_MODEL = os.getenv("GEMINI_PRIMARY_MODEL") or os.getenv("MODEL_NAME") or "gemini-3.8-flash"
@@ -81,10 +80,13 @@ REQUEST_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_SECONDS", "15"))  # cap one pro
 MAX_ROUNDS = int(os.getenv("LLM_MAX_ROUNDS", "1"))                 # one pass: avoid long outage retry loops
 TRACE_PATH = Path("evidence/traces/llm_calls.jsonl")               # where call records are appended
 
-# The full ordered chain. dict.fromkeys() removes duplicates while keeping order,
-# e.g. if someone lists the primary model in the fallback list too.
-MODELS = list(dict.fromkeys([PRIMARY_MODEL, *FALLBACK_MODELS]))
-MAX_MODEL_ATTEMPTS = max(1, int(os.getenv("LLM_MAX_MODEL_ATTEMPTS", "2")))
+# Gemini remains first on every new request. If configured, Groq is the first
+# provider fallback; the other Gemini models remain available if that also fails.
+GEMINI_MODELS = list(dict.fromkeys([PRIMARY_MODEL, *FALLBACK_MODELS]))
+MODELS = list(dict.fromkeys(
+    [PRIMARY_MODEL, *([GROQ_MODEL_ID] if GROQ_API_KEY else []), *FALLBACK_MODELS]
+))
+MAX_MODEL_ATTEMPTS = max(1, int(os.getenv("LLM_MAX_MODEL_ATTEMPTS", str(len(MODELS)))))
 
 # Fail early with a clear message instead of a confusing SDK error later.
 if not API_KEY:
@@ -148,6 +150,15 @@ def _classify(exc: Exception) -> tuple[bool, str]:
             return True, f"{code} {status}".strip()
         # e.g. 400 bad request, 401/403 bad key: switching model will not fix these.
         return False, f"{code} {status}".strip()
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        if code in SWITCH_CODES or code in {401, 403}:
+            if code == 429:
+                return True, f"{code} Groq rate limit/quota"
+            if code in {401, 403}:
+                return True, f"{code} Groq credential rejected"
+            return True, f"{code} Groq provider error"
+        return False, f"{code} Groq provider error"
     # Network problems on our side (WinError 10060/10053 on Windows show up as these).
     if isinstance(exc, (httpx.TransportError, httpx.TimeoutException, TimeoutError, ConnectionError)):
         return True, f"network: {type(exc).__name__}"
@@ -155,6 +166,129 @@ def _classify(exc: Exception) -> tuple[bool, str]:
         return True, "empty response"
     # Anything else is probably a bug in our code: raise it.
     return False, f"{type(exc).__name__}: {exc}"
+
+
+def _is_groq_model(model: str) -> bool:
+    """Distinguish Groq model IDs from Gemini model names in the shared chain."""
+    return model.startswith("groq:")
+
+
+def _to_openai_messages(contents: list[types.Content], system_instruction: str | None) -> list[dict]:
+    """Translate the shared Gemini-style history into Groq's OpenAI-compatible messages."""
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+
+    for content in contents:
+        role = "assistant" if content.role == "model" else content.role
+        text_parts = []
+        tool_calls = []
+        tool_results = []
+        for part in content.parts or []:
+            if part.text:
+                text_parts.append(part.text)
+            function_call = part.function_call
+            if function_call:
+                arguments = dict(function_call.args or {})
+                tool_calls.append({
+                    "id": function_call.id or f"call_{len(tool_calls) + 1}",
+                    "type": "function",
+                    "function": {"name": function_call.name, "arguments": json.dumps(arguments)},
+                })
+            function_response = part.function_response
+            if function_response:
+                tool_results.append({
+                    "role": "tool",
+                    "tool_call_id": function_response.id or function_response.name,
+                    "content": json.dumps(function_response.response, ensure_ascii=False, default=str),
+                })
+
+        if text_parts or tool_calls:
+            message = {"role": role or "user", "content": "\n".join(text_parts) or None}
+            if tool_calls:
+                message["tool_calls"] = tool_calls
+            messages.append(message)
+        messages.extend(tool_results)
+    return messages
+
+
+def _groq_tools(config: types.GenerateContentConfig) -> list[dict]:
+    """Convert Gemini function declarations to the OpenAI tool schema used by Groq."""
+    tools = []
+    for tool in config.tools or []:
+        for declaration in tool.function_declarations or []:
+            schema = (getattr(declaration, "parameters_json_schema", None)
+                      or getattr(declaration, "parameters", None)
+                      or {"type": "object", "properties": {}})
+            if hasattr(schema, "model_dump"):
+                schema = schema.model_dump(exclude_none=True)
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": declaration.name,
+                    "description": declaration.description or "",
+                    "parameters": schema,
+                },
+            })
+    return tools
+
+
+def _groq_generate_content(model: str, contents: list[types.Content],
+                           config: types.GenerateContentConfig) -> types.GenerateContentResponse:
+    """Call Groq through its OpenAI-compatible endpoint and normalize its answer for our agent."""
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY is required to use the Groq fallback.")
+
+    payload: dict[str, Any] = {
+        "model": model.removeprefix("groq:"),
+        "messages": _to_openai_messages(contents, config.system_instruction),
+        "temperature": config.temperature,
+    }
+    tools = _groq_tools(config)
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+    if config.response_mime_type == "application/json":
+        payload["response_format"] = {"type": "json_object"}
+
+    response = httpx.post(
+        GROQ_CHAT_COMPLETIONS_URL,
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        json=payload,
+        timeout=REQUEST_TIMEOUT_S,
+    )
+    response.raise_for_status()
+    choice = response.json()["choices"][0]["message"]
+    text = choice.get("content") or ""
+    parts = [types.Part(text=text)] if text else []
+    for item in choice.get("tool_calls") or []:
+        function = item["function"]
+        arguments = function.get("arguments") or "{}"
+        if isinstance(arguments, str):
+            arguments = json.loads(arguments)
+        parts.append(types.Part(function_call=types.FunctionCall(
+            id=item.get("id"), name=function["name"], args=arguments,
+        )))
+    content = types.Content(role="model", parts=parts)
+    return types.GenerateContentResponse(candidates=[types.Candidate(content=content)])
+
+
+def generate_content(model: str, contents: list[types.Content],
+                     config: types.GenerateContentConfig) -> types.GenerateContentResponse:
+    """Make a content request through Gemini or its configured Groq fallback."""
+    if _is_groq_model(model):
+        return _groq_generate_content(model, contents, config)
+    return client.models.generate_content(model=model, contents=contents, config=config)
+
+
+class _HistorySnapshot:
+    """Keep ChatSession's public history contract when Groq answers a turn."""
+
+    def __init__(self, history: list[types.Content]):
+        self._history = history
+
+    def get_history(self) -> list[types.Content]:
+        return self._history
 
 
 def _write_trace(record: dict) -> None:
@@ -197,8 +331,8 @@ def call_with_fallback(request: Callable[[str], Any], label: str,
     unusable_models : a set shared across several calls (e.g. all turns of one
               agent run) so a model that ran out of daily quota is not retried.
     order   : optional model order for THIS call (default: MODELS). tool_agent.py
-              passes the model that answered turn 1 first, so one agent run
-              stays on one model whenever possible.
+             can prefer the model that answered the preceding turn so tool
+             conversations stay with the same provider after a handoff.
 
     Returns (response, model_that_answered, attempts_list).
     Raises the original exception for non-switchable errors, or
@@ -232,7 +366,8 @@ def call_with_fallback(request: Callable[[str], Any], label: str,
                     # Bad key, bad request or a bug: record it and stop immediately.
                     _write_trace(_trace_record(label, None, attempts, "fatal_error"))
                     raise
-                if "daily quota" in reason or "not available" in reason:
+                if any(marker in reason.lower() for marker in
+                       ("quota", "not available", "credential rejected")):
                     unusable.add(model)             # do not waste time on it again
                 nxt = "next model" if model != models[-1] else "end of round"
                 print(f"[WARN] {model} failed ({reason}) -> {nxt}")
@@ -280,7 +415,14 @@ class ChatSession:
         start = time.monotonic()
 
         def request(model: str):
-            # A fresh SDK chat object for whichever model we are trying, seeded with our history.
+            if _is_groq_model(model):
+                turn_contents = [*self.history, types.Content(
+                    role="user", parts=[types.Part(text=message)])]
+                response = generate_content(model, turn_contents, self.config)
+                return response, _HistorySnapshot(
+                    [*turn_contents, response.candidates[0].content])
+            # Gemini uses its chat helper; Groq is sent the matching history by
+            # the OpenAI-compatible adapter above.
             chat = client.chats.create(model=model, config=self.config, history=self.history)
             response = chat.send_message(message)
             if not response.text:

@@ -2,8 +2,8 @@
 Check which Gemini models this API key can use.
 
   py src\\test_models.py           list models that support generateContent (free, no quota used)
-  py src\\test_models.py --probe   also send one tiny JSON request to each model in the
-                                   configured chain (uses 1 request of each model's daily quota)
+  py src\\test_models.py --probe   also send one tiny JSON request to each configured Gemini
+                                   model (uses 1 request of each model's daily quota)
 
 Being listed is not enough: on 2026-10-01 gemini-2.5-flash was listed but
 returned 404 "no longer available to new users" when called.
@@ -12,7 +12,7 @@ import argparse
 
 from google.genai import types
 
-from llm_client import MODELS, client
+from llm_client import GEMINI_MODELS, MODELS, client
 
 
 def list_models() -> list[str]:
@@ -46,7 +46,8 @@ if __name__ == "__main__":
     for n in flash:
         print(f"  {n}")
 
-    print(f"\nConfigured chain: {' -> '.join(MODELS)}")
-    for m in MODELS:
+    print(f"\nConfigured provider chain: {' -> '.join(MODELS)}")
+    print(f"Gemini models to probe directly: {' -> '.join(GEMINI_MODELS)}")
+    for m in GEMINI_MODELS:
         status = probe(m) if args.probe else ("listed" if m in listed else "NOT LISTED")
         print(f"  {m:<24} {status}")

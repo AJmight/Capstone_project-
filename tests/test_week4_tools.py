@@ -122,6 +122,41 @@ def test_offline_01_low_stock_matches_csv():
         assert r["count"] == len(LOW_IDS) == 10
 
 
+def test_offline_01b_restock_options_include_grounded_supplier_tradeoffs():
+    """The AI receives per-quote quantities and costs, while all calculations remain exact."""
+    with sandbox():
+        result = procurement.get_restock_options()
+        assert result["count"] == len(LOW_IDS)
+        bic = next(item for item in result["items"] if item["item_id"] == "ITM001")
+        nakawa = next(option for option in bic["supplier_options"]
+                      if option["supplier_name"] == "Nakawa Stationers")
+        assert nakawa["recommended_qty"] == expected_line("ITM001")["qty"]
+        assert nakawa["unit_price_ugx"] == 500
+        assert nakawa["estimated_cost_ugx"] == nakawa["recommended_qty"] * 500
+        assert bic["months_of_history"] == 12 and not bic["needs_human"]
+
+
+def test_offline_01c_ai_supplier_choice_is_recalculated_in_plan_and_draft():
+    """A verified AI supplier choice is costed by Python and retained in the saved draft."""
+    with sandbox():
+        plan = procurement.plan_within_budget(
+            ["ITM001"], 50000, priority_order=["ITM001"],
+            supplier_choices={"ITM001": "Nakawa Stationers"},
+            supplier_reasons={"ITM001": "Earlier delivery supports urgent restock."},
+            priority_rationale="Prioritized the urgent item and delivery date.")
+        assert plan["included"][0]["selected_supplier"] == "Nakawa Stationers"
+        assert plan["planned_total_ugx"] == 32500
+        draft = procurement.draft_requisition(
+            ["ITM001"], supplier_choices={"ITM001": "Nakawa Stationers"},
+            supplier_reasons={"ITM001": "Earlier delivery supports urgent restock."},
+            selection_rationale=plan["priority_rationale"])
+        line = draft["lines"][0]
+        assert line["unit_price_ugx"] == 500 and line["total_cost_ugx"] == 32500
+        assert line["selected_supplier"] == "Nakawa Stationers"
+        assert draft["ai_selection_rationale"] == plan["priority_rationale"]
+        assert "UGX 476" in line["supplier_reason"]
+
+
 def test_offline_02_reorder_qty_all_low_items():
     """estimate_reorder_quantity matches the independent formula for every low item (F-04)."""
     with sandbox():
@@ -248,11 +283,11 @@ def test_offline_16_no_tool_can_approve_order_or_pay():
     (Replaces the old viewer-role test: user roles were removed on 2026-10-13 - single trusted user.)"""
     with sandbox():
         names = [d["name"] for d in registry.tool_declarations()]
-        assert sorted(names) == sorted(registry.TOOL_REGISTRY) and len(names) == 8
+        assert sorted(names) == sorted(registry.TOOL_REGISTRY) and len(names) == 9
         forbidden = ("approve", "order", "pay", "transfer", "send", "contact", "email")
         # "reorder" in estimate_reorder_quantity is a calculation, not an order: check whole words.
         assert not [n for n in names if any(w in n.split("_") for w in forbidden)], names
-        assert [s["side_effect"] for s in registry.TOOL_REGISTRY.values()].count("none") == 7
+        assert [s["side_effect"] for s in registry.TOOL_REGISTRY.values()].count("none") == 8
 
 
 def test_offline_17_parameter_validation():

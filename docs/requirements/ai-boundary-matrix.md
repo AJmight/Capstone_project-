@@ -9,8 +9,8 @@ system as built. Columns: what the **AI** does, what **code** enforces, what a *
 | Low-stock flagging | Chooses `get_low_stock`, summarises | Applies `stock <= reorder_point` | Sets reorder points (per term) | `procurement.get_low_stock` |
 | Quote comparison | Explains options | Sorts by price, tie → lead time | Chooses a dearer supplier with a written reason | `compare_supplier_quotes` |
 | Reorder quantity | Explains the working | `ceil(avg × 1.5 − stock)`, MOQ, exact fractions | Sets quantity for items without history | `estimate_reorder_quantity` |
-| Budget planning | Decides to plan, explains deferred items | Urgency order, greedy fit within budget | Funds deferred items or not | `plan_within_budget` |
-| Draft requisition | Decides which items to request (named/planned) | Builds lines, totals, ±10 %, ID, date, creator; skips well-stocked items | — | `draft_requisition` |
+| Budget planning | Chooses and explains item priority and supplier trade-offs from available quote, stock and history evidence | Validates every item/supplier choice, recalculates quantity and cost, applies proposed priorities within hard budget ceiling | Funds deferred items or not | `get_restock_options`, `plan_within_budget` |
+| Draft requisition | Chooses eligible items and passes validated supplier choices plus concise rationale | Revalidates stock and quote selections; builds lines, totals, ±10 %, ID, date and creator; skips well-stocked items | — | `draft_requisition` |
 | Historical questions | Interprets period, asks to clarify vague questions | Exact totals, data range | — | `query_purchase_history` |
 | Policy questions | Answers only from retrieved passages, cites them | BM25 retrieval, score gate, citation check | Maintains the policy documents | `rag/`, `search_policy` |
 | Manual override | — | Recalculates totals and cap; logs original + reason | Changes the quantity, gives a reason | `approvals.edit_quantity` |

@@ -72,7 +72,7 @@ from pathlib import Path                      # file paths
 from google.genai import types                # SDK request/response types
 
 from ai_engine import load_system_prompt      # reads only the BEGIN/END part of a prompt file
-from llm_client import AllModelsFailedError, MODELS, call_with_fallback, client
+from llm_client import AllModelsFailedError, MODELS, call_with_fallback, client, generate_content
 from storage import DEFAULT_TENANT_ID, DEFAULT_USER_ID, SQLiteStorage
 from tools import procurement
 from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations
@@ -80,7 +80,7 @@ from tools.registry import RETRYABLE_ERRORS, execute_tool, tool_declarations
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PROMPT_PATH = Path("prompts/procurement_assistant_v2.5.0.md")       # tool-mode prompt
+PROMPT_PATH = Path("prompts/procurement_assistant_v2.6.0.md")       # AI-led restock prompt
 MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "3"))
 MAX_TOOL_CALLS = int(os.getenv("AGENT_MAX_TOOL_CALLS", "6"))
 TRACE_PATH = Path("evidence/week4/agent_traces.jsonl")
@@ -212,6 +212,8 @@ def run_agent(user_message: str, user_name: str = "shop user",
         order = ([models_used[-1]] + [m for m in MODELS if m != models_used[-1]]) if models_used else None
 
         def request(model: str):
+            if model.startswith("groq:"):
+                return generate_content(model, contents, config)
             return client.models.generate_content(model=model, contents=contents, config=config)
 
         try:

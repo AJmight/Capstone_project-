@@ -1,6 +1,6 @@
 # Project Handoff — SME Procurement Support Agent
 
-**Last updated:** 2026-10-24 — UI workflow and session hardening, bounded copilot context, faster default restock flow. AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
+**Last updated:** 2026-10-27 — AI-led restock and human-review UI refinement in progress. AI assistants: also read `/AGENTS.md`. Team: `docs/ONBOARDING.md`. Read this before changing anything.
 This replaces an earlier handoff draft that contained outdated facts (listed in §9).
 
 ## 1. Identity
@@ -19,8 +19,9 @@ This replaces an earlier handoff draft that contained outdated facts (listed in 
 A Ugandan stationery/office-supplies shop tracks stock in an exercise book that can be lost or
 water-damaged; suppliers pressure junior staff to over-order. The system reads synthetic CSVs, flags
 low stock, compares quotes, estimates reorder quantities, drafts requisitions and answers history
-questions. **AI supports, never decides.** It may not approve, order, pay, contact suppliers or connect
-to banks/mobile money. A human approves every draft.
+questions. The AI gathers evidence, recommends priorities and supplier trade-offs, and may prepare a
+draft; Python calculates and validates; a human approves or rejects every draft. The AI may not
+order, pay, contact suppliers or connect to banks/mobile money.
 
 ## 3. Environment
 
@@ -35,19 +36,20 @@ Git push works from PowerShell (Git Credential Manager opens the browser). Do no
 | `gemini-3.7-flash`, `3.6-flash`, `3.5-flash`, `3.5-flash-lite`, `3.1-flash-lite` | Work; separate daily quotas; fallback chain in this order |
 | `gemini-2.5-flash` | **404 "no longer available to new users"** — do not use |
 
-`src/llm_client.py` switches model immediately on 503/429/5xx/timeout/network/404, runs up to 3 rounds,
-skips models out of daily quota or 404, and logs every call to `evidence/traces/llm_calls.jsonl`.
-Chat sessions are used for multi-turn memory; they do not avoid 503s.
+`src/llm_client.py` tries Gemini first on each new request; when `GROQ_API_KEY` is configured,
+retryable Gemini quota/availability/network errors hand the same bounded conversation and tool history
+to the Groq Llama fallback. Remaining Gemini models stay after Groq in the fallback chain. The provider
+switch is not shown in the chat UI. Attempts are logged to `evidence/traces/llm_calls.jsonl`.
 
 ## 5. Current files
 
 | File | Purpose |
 |:---|:---|
-| `.env` (git-ignored) / `.env.example` | `GEMINI_API_KEY`, `GEMINI_PRIMARY_MODEL`, `GEMINI_FALLBACK_MODELS`, `LLM_TIMEOUT_SECONDS`, `LLM_MAX_ROUNDS` |
-| `src/llm_client.py` | `generate()` one-shot and `ChatSession` multi-turn, both with fallback |
+| `.env` (git-ignored) / `.env.example` | `GEMINI_API_KEY`, optional `GROQ_API_KEY` / `GROQ_MODEL`, Gemini model settings and LLM limits |
+| `src/llm_client.py` | Gemini-first provider chain; Groq receives the same conversation and tool-call history on fallback |
 | `src/ai_engine.py` | `load_system_prompt()` (only BEGIN/END section), `load_csv()`, `parse_json()`, `analyze_inventory()` |
 | `src/test_models.py` | Lists usable models (`--probe` sends 1 request each) |
-| `prompts/procurement_assistant_v1.2.0.md` | **Current prompt.** History in `prompts/prompt_history.md`; old versions in `prompts/archive/` |
+| `prompts/procurement_assistant_v2.6.0.md` | **Current tool-mode prompt** for the Copilot and bounded restock agent. History in `prompts/prompt_history.md`; old versions in `prompts/archive/` |
 | `tests/test_week2_cases.py` | 10 live test cases; expectations computed from CSVs; `--prompt`, `--only` |
 | `docs/evaluation/week2-prompt-evaluation.md` | Results (v1.1.0 7/10 → v1.2.0 9/10) and failure catalogue F-01…F-06 |
 | `docs/requirements/model-selection.md` | Model Selection Note |
@@ -147,15 +149,40 @@ Changes made in the release pass (all with re-tests):
   `evidence/final/regression_run_2026-10-20.md` for the verbatim output.
 - Release tag: `v1.0.0`.
 
+## 6h. Post-release AI-led restock refinement — 2026-10-27
+
+- Restock now gathers all available low-stock, purchase-history and supplier-quote evidence through
+  `get_restock_options`, then requires the model to propose the priority order and supplier trade-offs.
+- Python validates the proposed IDs and suppliers, calculates quantities and costs, enforces the
+  budget and safety ceiling, and verifies that the saved draft matches the validated plan. The model
+  cannot approve or execute a purchase.
+- Incomplete records are disclosed for human follow-up; any costable items may form a partial draft.
+  If every configured model is unavailable, the system hands off without creating a deterministic draft.
+- The Restock page no longer presents the deterministic planner as its default path. Approval review
+  has direct Approve/Reject controls and displays the AI rationale with supplier/quote context.
+- Prompt v2.6.0 is current for tool-mode calls. The v2.5.0 prompt was archived and the current tool
+  schema is documented in `docs/requirements/tool-schemas.json`.
+- Validation completed: Week 4 tools 24/24, Week 5 agent 20/20, MVP tools 7/7, Week 3 RAG
+  runner completed successfully, Week 6 9/9, Week 7 31/31, Week 8 19/19, and Streamlit UI
+  workflows 17/17. The regenerated `docs/requirements/tool-schemas.json` matches the registry.
+- The live connection smoke test was attempted after offline validation. Gemini returned
+  `503 UNAVAILABLE` for `gemini-3.8-flash` and `504 DEADLINE_EXCEEDED` for
+  `gemini-3.7-flash`; no live AI restock run is confirmed yet. Do not retry repeatedly against
+  the daily quota. The app is currently serving at `http://localhost:8501` (health HTTP 200).
+- Full change rationale and verification details: `docs/ai-led-restock-change-report.md`.
+- Thoroughness takes precedence over latency: no evidence collection, validation, human approval, or
+  AI-outage safety boundary is removed to make the flow appear faster. No latency benchmark is claimed.
+
 ## 7. Known issues
 
 - F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (documented in the final report).
 - F-12 (the ±10 % range could exceed the budget) — **closed** in Week 7 by `src/guardrails.py`; the ceiling is
   now enforced in code inside `src/restock_agent.py`, not only checked in the prompt.
-- v1.2.0 has not yet been evaluated on `gemini-3.8-flash` (quota exhausted during runs).
+- The post-release v2.6.0 restock prompt has not yet been evaluated live on `gemini-3.8-flash`;
+  complete the offline regression first and account for the model's daily quota.
 - `docs/requirements/project-charter.md` and `user-stories.md` reflect the current no-login tenant demo and Stitch journey. Business names select workspaces, but this is not authentication.
 - **No CI yet** (DO-2 open): the seven offline suites are only run by hand, so nothing catches a regression on push.
-- **Streamlit prototype:** `src/streamlit_app.py` starts with a business name (no login). Dashboard is AI Copilot; Operations, Restock AI and Approvals follow the local Stitch exports. Stock, sales, purchases, quotes, policies, drafts, form keys and conversation context are tenant-scoped. The quick deterministic planner creates a budget-linked workflow session and automatically opens Approvals. The optional AI agent is capped at five turns and eight tool calls (one recovery pass), while general Copilot tool runs use three turns and six calls; model calls time out after 15 seconds, try at most two models and do not repeat the chain by default. Copilot retains four recent exchanges and compacts older context locally. Run with `py -m streamlit run src\streamlit_app.py`; 15 headless workflow checks live in `tests/test_ui_home.py`.
+- **Streamlit prototype:** `src/streamlit_app.py` starts with a business name (no login). Dashboard is AI Copilot; Operations, Restock AI and Approvals follow the local Stitch exports. Stock, sales, purchases, quotes, policies, drafts, form keys and conversation context are tenant-scoped. Restock uses the bounded AI agent and opens saved drafts for human review; no deterministic draft is created when the model is unavailable. The agent is capped at five turns and eight tool calls (with one recovery pass); general Copilot runs have their own bounded limits. Copilot retains four recent exchanges and compacts older context locally. Run with `py -m streamlit run src\streamlit_app.py`; UI workflow checks live in `tests/test_ui_home.py`.
 - The contribution rows in `docs/weekly-reports/week*-report.md` are still `[name]` placeholders (PR-3 open).
 - `evidence/final/screenshots/` is empty — the demo screenshots are still to be captured (AP-4 open).
 

@@ -3,7 +3,7 @@
 | Field | Value |
 |:---|:---|
 | **Course** | BSE4104 Emerging Trends in Software Engineering — 8-week AI-native & agentic capstone |
-| **Version** | 1.2 — revised 2026-10-24 to match the Stitch prototype flows, tenant workspaces and tested browser features |
+| **Version** | 1.3 — revised 2026-10-27 for AI-led restock planning and direct human approval controls |
 | **Prepared by** | Mwesigwa Arnold Mugahi (AI Engineering Lead); team review pending |
 
 ## 1. Problem
@@ -29,11 +29,13 @@ under that tenant. This is demo-level separation, not identity verification or p
 ## 3. Proposal statement (brief §2 format)
 
 > Our system helps **small-shop owners and staff** keep a tenant-scoped digital stock book and prepare
-> **weekly procurement** (record deliveries and counter sales, find low stock, decide quantities within a
-> budget, compare supplier quotes, ask shop-policy questions and draft a requisition). AI is used for
-> **understanding requests, planning which tools to use, retrieving policy, and explaining results**.
-> Deterministic software remains responsible for **all calculations, business rules, validation,
-> permissions and limits**. The agent may use **eight approved read/draft tools** but may **not approve,
+> **weekly procurement** (record deliveries and counter sales, find low stock, decide priorities and
+> supplier trade-offs within a budget, compare quotes, ask shop-policy questions and draft a requisition).
+> AI is used for **understanding requests, gathering evidence, prioritizing restock items, choosing
+> supplier trade-offs, planning tool use, retrieving policy, and explaining recommendations**.
+> Deterministic software remains responsible for **all calculations, business rules, selection
+> validation, permissions, hard budget limits and bounded execution**. The agent may use **nine
+> approved read/draft tools** but may **not approve,
 > order, pay, contact suppliers or connect to banks or mobile money**. We build and evaluate the system
 > using **synthetic CSV data (15 items, 12 months of purchases, 3 suppliers) and a 12-document synthetic
 > policy corpus**.
@@ -42,17 +44,19 @@ under that tenant. This is demo-level separation, not identity verification or p
 
 | AI adds value | Deterministic software decides | Humans decide |
 |:---|:---|:---|
-| Understanding free-text questions; choosing tools; multi-step planning; explaining figures; grounded policy answers | Low-stock rule, reorder quantity, supplier choice, totals, budget fit, 200 % cap, permissions, limits, outcome of agent runs | Approve/reject/edit requisitions; quantities for items without history; whether to fund deferred items; placing orders and paying |
+| Understanding free-text questions; choosing tools; multi-step planning; choosing restock priorities and supplier trade-offs from evidence; explaining figures; grounded policy answers | Low-stock rule, reorder quantity, validating supplier selections, exact totals and quote-specific costs, enforcing the hard budget ceiling, 200 % cap, permissions, limits, outcome of agent runs | Approve/reject/edit requisitions; quantities for items without history; whether to fund deferred items; placing orders and paying |
 
 Full matrix: `docs/requirements/ai-boundary-matrix.md`.
 
 ## 5. Scope
 
 **In scope:** the existing tested procurement functions plus a browser prototype guided by local Stitch
-exports. The browser journey is business name → Dashboard / AI Copilot → Operations (stock, sales,
-purchases, quotes and activity) → Restock AI → Approvals. Policy Q&A/editing lives in the copilot. A
-saved restock draft opens Approvals automatically. The default restock planner is deterministic and
-fast; an optional bounded AI-agent path explains the multi-step process. Chat context is scoped to the
+exports. Restock AI is the normal planner: it receives full tool-computed evidence, chooses priorities
+and supplier trade-offs, and requests Python validation before a draft can be saved. If the AI is
+unavailable, no automatic restock draft is created. The browser journey is business name → Dashboard / AI Copilot → Operations (stock, sales,
+purchases, quotes and activity) → Restock AI → Approvals. Policy Q&A/editing lives in the copilot. An
+AI-planned restock draft opens Approvals automatically. The bounded AI agent makes priorities and
+supplier trade-offs; deterministic tools calculate and validate every figure. Chat context is scoped to the
 selected tenant and browser session, with four recent turns and a compact extract of older turns.
 
 **Completed capstone layers:** persistent workflow state, justified memory, MCP-style tool interface,

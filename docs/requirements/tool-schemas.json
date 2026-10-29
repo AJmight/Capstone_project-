@@ -3,10 +3,12 @@
   "users": "single trusted user per shop, no roles (decision-001)",
   "tools": [
     {
+      "name": "get_restock_options",
+      "description": "Gather every low-stock item, exact history-based reorder quantity, and all supplier price, MOQ and lead-time options. Python supplies the evidence; the AI chooses the priority and supplier trade-offs.",
       "side_effect": "none",
-      "context_args_injected_by_system": [],
-      "name": "get_low_stock",
-      "description": "List every inventory item whose current_stock is at or below its reorder_point, with item IDs. Use it to answer 'what is low?' and to find item IDs before drafting.",
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {},
@@ -14,10 +16,25 @@
       }
     },
     {
+      "name": "get_low_stock",
+      "description": "List every inventory item whose current_stock is at or below its reorder_point, with item IDs. Use it to answer 'what is low?' and to find item IDs before drafting.",
       "side_effect": "none",
-      "context_args_injected_by_system": [],
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
+      "parameters_json_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
       "name": "compare_supplier_quotes",
       "description": "Return all supplier quotes for ONE item sorted cheapest first (ties broken by shorter lead time), with minimum order quantities.",
+      "side_effect": "none",
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {
@@ -32,10 +49,12 @@
       }
     },
     {
-      "side_effect": "none",
-      "context_args_injected_by_system": [],
       "name": "estimate_reorder_quantity",
       "description": "Compute the exact recommended reorder quantity for ONE item from its purchase history (1.5 months of average demand minus current stock, rounded up, raised to supplier minimum order), with the working and the 200% safety-cap check. Always use this instead of doing arithmetic.",
+      "side_effect": "none",
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {
@@ -50,12 +69,14 @@
       }
     },
     {
-      "side_effect": "writes a draft file",
-      "context_args_injected_by_system": [
-        "created_by"
-      ],
       "name": "draft_requisition",
       "description": "Create and save a DRAFT purchase requisition for the listed items. Python computes every quantity, price, total and budget. Items that are not low on stock are skipped automatically. The draft is NOT sent or approved; a human must review it.",
+      "side_effect": "writes a draft file",
+      "context_args_injected_by_system": [
+        "created_by",
+        "tenant_id",
+        "user_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {
@@ -67,7 +88,25 @@
             },
             "minItems": 1,
             "maxItems": 20,
-            "description": "Items the user asked for (IDs or names)."
+            "description": "Items selected by the AI plan (IDs or names)."
+          },
+          "supplier_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "AI-selected supplier name by item ID, validated against live quotes."
+          },
+          "supplier_reasons": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Brief evidence-based AI rationale for each selected supplier."
+          },
+          "selection_rationale": {
+            "type": "string",
+            "description": "Brief summary of the AI's selection criteria."
           }
         },
         "required": [
@@ -76,10 +115,12 @@
       }
     },
     {
-      "side_effect": "none",
-      "context_args_injected_by_system": [],
       "name": "plan_within_budget",
-      "description": "Decide which low-stock items fit a budget, most urgent first (stock / reorder point). Returns 'included' items to draft, 'deferred' items that do not fit, and 'needs_human' items that cannot be costed (no purchase history or no quote). Writes nothing.",
+      "description": "Validate the AI's priority order and supplier choices, then calculate which low-stock items fit the budget. Returns 'included' items to draft, 'deferred' items that do not fit, and 'needs_human' items that cannot be costed (no purchase history or no quote). An omitted priority order retains the urgency-first compatibility behavior. Writes nothing.",
+      "side_effect": "none",
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {
@@ -97,6 +138,34 @@
             "type": "integer",
             "minimum": 1,
             "description": "Spending limit in UGX. Omit if the user gave no budget."
+          },
+          "priority_order": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "An item ID such as ITM001, or the item's name such as 'Bic Pens (Blue)'."
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "AI's priority ordering of every requested item ID."
+          },
+          "supplier_choices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "AI-selected supplier name by item ID, validated against live quotes."
+          },
+          "supplier_reasons": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Brief evidence-based AI rationale for each selected supplier."
+          },
+          "priority_rationale": {
+            "type": "string",
+            "description": "Brief evidence-based explanation of the priority order."
           }
         },
         "required": [
@@ -105,10 +174,12 @@
       }
     },
     {
-      "side_effect": "none",
-      "context_args_injected_by_system": [],
       "name": "get_inventory",
       "description": "List inventory items with current stock, reorder point and whether each is low. Optionally filter by category (Stationery, Office, Electronics).",
+      "side_effect": "none",
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {
@@ -121,10 +192,12 @@
       }
     },
     {
-      "side_effect": "none",
-      "context_args_injected_by_system": [],
       "name": "query_purchase_history",
       "description": "Past purchases of ONE item with exact totals (quantity and spend), optionally for a month range. Use for questions like 'how many pens did we buy in March 2025?'. Returns data_range so you can tell the user when a period has no data.",
+      "side_effect": "none",
+      "context_args_injected_by_system": [
+        "tenant_id"
+      ],
       "parameters_json_schema": {
         "type": "object",
         "properties": {
@@ -147,12 +220,12 @@
       }
     },
     {
+      "name": "search_policy",
+      "description": "Search the shop's policy and procedure documents (approval limits, payments, supplier delivery/returns/terms, reorder guidelines, supplier pressure). Returns passages with source_id. Use it for ANY policy or process question and cite the source_id; never answer policy questions from memory.",
       "side_effect": "none",
       "context_args_injected_by_system": [
         "tenant_id"
       ],
-      "name": "search_policy",
-      "description": "Search the shop's policy and procedure documents (approval limits, payments, supplier delivery/returns/terms, reorder guidelines, supplier pressure). Returns passages with source_id. Use it for ANY policy or process question and cite the source_id; never answer policy questions from memory.",
       "parameters_json_schema": {
         "type": "object",
         "properties": {

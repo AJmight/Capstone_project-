@@ -2,7 +2,7 @@
 
 | Field | Value |
 |:---|:---|
-| **Version** | 1.2 (MVP 2026-10-06: tools 6–8 `get_inventory`, `query_purchase_history`, `search_policy`) |
+| **Version** | 1.3 (2026-10-27: tool 9 `get_restock_options`; AI selections validated by Python) |
 | **Owner** | Mwesigwa Arnold Mugahi (AI Engineering Lead) |
 | **Code** | `src/tools/procurement.py` (functions), `src/tools/registry.py` (allow-list, argument validation, executor) |
 | **Machine-readable schemas** | `docs/requirements/tool-schemas.json` (exported from the code) |
@@ -18,7 +18,7 @@
 ## Who can use the tools
 
 There are **no user roles** (decision 2026-10-13, `decision-001-single-trusted-user.md`): the shop's trusted
-user has access to all eight tools through the agent. Each tool carries a `side_effect` note — seven have
+user has access to all nine tools through the agent. Each tool carries a `side_effect` note — eight have
 `none`, `draft_requisition` `writes a draft file`.
 
 **Nothing can approve, order or pay through the AI**: those tools do not exist. Approval is a human
@@ -112,6 +112,23 @@ Covers User Stories 2, 4, 5 (unique ID, date, creator), 7 (reasoning trail), 8 (
 | **Output** | `{"query", "results": [{source_id, title, section, text, score}], "note"?}` — `source_id` such as `POL-01#approval-thresholds` must be cited |
 | **Failure** | empty `results` + note when nothing scores above the minimum; `INVALID_PARAMETER` |
 | **Permission / side effects** | read / none — implemented in `src/tools/knowledge.py` on top of a tenant-keyed `src/rag/index.py` |
+
+## Tool 9 — `get_restock_options` (AI-led restock)
+
+| Field | Value |
+|:---|:---|
+| **Purpose** | Give the AI complete, grounded evidence for restock decisions |
+| **Input** | none; `tenant_id` is injected by the trusted application context |
+| **Output** | Every low-stock item with exact Python-computed demand quantity and basis; all current supplier quotes with quote-specific MOQ, delivery, quantity and estimated cost; explicit missing-data flags/reasons |
+| **Reads** | Current stock, purchase history and supplier quotes |
+| **Permission / side effects** | read / none |
+| **Failure behaviour** | Missing/malformed records → `INVALID_DATA`; no values are invented |
+| **Used by** | `src/restock_agent.py` SENSE step before the model plans |
+
+The AI proposes a priority ordering, a quoted supplier and a brief reason for every costable item.
+`plan_within_budget` validates those choices against current records, recalculates exact costs and
+checks the user's ceiling. `draft_requisition` recomputes and saves the same selections, then post-
+conditions verify draft IDs, suppliers and totals against the validated plan.
 
 ## Human edit before approval (MVP, User Story 9)
 

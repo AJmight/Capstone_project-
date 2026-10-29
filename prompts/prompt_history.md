@@ -1,7 +1,7 @@
 # Prompt Version History — SME Procurement Assistant
 
 Current prompts:
-- **Tool mode:** `prompts/procurement_assistant_v2.5.0.md` (loaded by `src/tool_agent.py` and `src/restock_agent.py`)
+- **Tool mode:** `prompts/procurement_assistant_v2.6.0.md` (loaded by `src/tool_agent.py` and `src/restock_agent.py`)
 - **RAG:** `prompts/policy_qa_v1.0.0.md` (loaded by `src/rag/policy_qa.py`, Week 3)
 - **Context mode:** `prompts/procurement_assistant_v1.2.0.md` (loaded by `src/ai_engine.py`, Week 2 baseline)
 
@@ -18,10 +18,18 @@ Older versions are kept unchanged in `prompts/archive/`.
 | 2.2.1 | `archive/procurement_assistant_v2.2.1.md` | T4 clean — `docs/evaluation/week5-agent-evaluation.md` |
 | 2.3.0 | `archive/procurement_assistant_v2.3.0.md` | MVP live 4/6 (M-05 test error, M-06 → F-16) |
 | 2.4.0 | `archive/procurement_assistant_v2.4.0.md` | MVP live 6/6; Week 4 live 6/6; Week 5 traces 4/4 |
-| 2.5.0 | `procurement_assistant_v2.5.0.md` | see `docs/requirements/decision-001-single-trusted-user.md` (regression results added there) |
+| 2.5.0 | `archive/procurement_assistant_v2.5.0.md` | see `docs/requirements/decision-001-single-trusted-user.md` (regression results added there) |
+| 2.6.0 | `procurement_assistant_v2.6.0.md` | AI-led restock decisions; Python validates selections and ceilings; no deterministic fallback draft |
 | policy_qa 1.0.0 | `policy_qa_v1.0.0.md` | RAG answers 15/15 — `docs/evaluation/week3-rag-evaluation.md` |
 
 ---
+
+## v2.6.0 — 2026-10-27
+
+Restock now asks the AI to rank low-stock items, weigh actual supplier quotes and explain its choices.
+Python provides quote-specific quantities and costs, validates chosen suppliers, recomputes the plan and
+enforces the budget before drafting. Missing records produce a grounded partial draft where possible;
+model unavailability never creates a non-AI draft.
 
 ## v2.5.0 — 2026-10-13
 

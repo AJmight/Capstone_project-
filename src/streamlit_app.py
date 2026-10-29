@@ -206,7 +206,14 @@ CSS = """
   .copilot-greeting span { font-size:1.25rem; }
   .st-key-copilot_transcript [data-testid="stChatMessage"]:has([data-testid*="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] { border-color:#c6e5df; border-radius:18px 5px 18px 18px; background:#edf8f5; }
   .st-key-copilot_transcript [data-testid="stChatMessage"] [data-testid*="chatAvatar"] { font-size:1.25rem; }
-  div[data-testid="stChatInput"] { bottom:calc(78px + env(safe-area-inset-bottom))!important; }
+  div[data-testid="stChatInput"] { bottom:calc(78px + env(safe-area-inset-bottom))!important; z-index:1000 !important; }
+  /* The transcript is a real scroll box: it fills the space above the chat-input
+   * dock and scrolls, so a long conversation never pushes the latest answer
+   * under the input. The bottom padding keeps the newest message clear of the
+   * dock, and the JS below scrolls to the bottom after every turn. */
+  .st-key-copilot_transcript { padding-bottom:calc(130px + env(safe-area-inset-bottom))!important; overflow-y:auto; max-height:calc(100vh - 240px); scroll-behavior:smooth; position:relative; }
+  .st-key-copilot_transcript [data-testid="stChatMessage"]:last-child { scroll-margin-bottom:160px; }
+  .st-key-copilot_transcript [data-testid="stVerticalPortal"] { z-index:50; }
   .st-key-copilot_transcript [data-testid="stDownloadButton"] button { min-height:38px; border-radius:12px; border-color:#c9b7ed; color:#5b21b6; background:#fff; }
   @keyframes nav-tap { 0% { transform:scale(.94); } 70% { transform:scale(1.04); } 100% { transform:scale(1); } }
   @keyframes rise-in { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
@@ -378,6 +385,9 @@ def render_dashboard(tenant_id: str, business_name: str) -> None:
                     f'{_icon_svg("inventory", 26)}</div><strong>This stock ledger is ready for your items.</strong>'
                     '<span>Add products in Operations and the assistant will use this shop\'s records.</span></div>',
                     unsafe_allow_html=True)
+    # The restock is planned through the chat (ask the copilot to "plan a restock
+    # under UGX X") so every draft is a conversation the shop owner can see and
+    # question - there is no separate control here.
     render_copilot_page(tenant_id, business_name)
 
 
@@ -385,8 +395,19 @@ def _run_business_question(question: str, tenant_id: str, business_name: str) ->
     """Run one question with the workspace scope passed as trusted context."""
     try:
         with st.status("Checking this business's records…", expanded=True) as status:
-            result = run_agent(question, user_name=business_name, tenant_id=tenant_id)
-            status.update(label="Response ready", state="complete", expanded=False)
+            if _is_restock_question(question):
+                # The model stays in the middle: run_restock senses low stock in
+                # code, then hands the model a [RESTOCK TASK] message with the
+                # Section 7 contract (plan -> decide -> draft -> summary). The
+                # The agent is the only restock planner; if the model is
+                # unavailable, run_restock hands off without saving a draft.
+                budget = _extract_restock_budget(question) or 300000
+                result = run_restock(int(budget), user_name=business_name,
+                                     shop_id=tenant_id, tenant_id=tenant_id)
+                status.update(label="Restock review complete", state="complete", expanded=False)
+            else:
+                result = run_agent(question, user_name=business_name, tenant_id=tenant_id)
+                status.update(label="Response ready", state="complete", expanded=False)
         st.write(result.get("final_text", "The assistant returned no response."))
     except Exception as exc:
         st.error(f"The assistant could not complete this request: {type(exc).__name__}: {exc}")
@@ -482,6 +503,8 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
                 st.markdown(turn["answer"])
                 if turn.get("result_rows"):
                     _render_csv_download(turn["result_rows"], tenant_id, index)
+                if turn.get("tool_calls"):
+                    _render_tool_evidence(turn["tool_calls"], index)
                 if turn.get("latency_s") is not None:
                     st.caption(f"{turn.get('latency_s')} s · checked against this shop's records")
     if history or summary:
@@ -509,31 +532,101 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
         else:
             try:
                 with st.status("Checking this business's records…", expanded=True) as status:
-                    contextual_question = _copilot_context(summary, history, question.strip())
-                    result = run_agent(contextual_question, user_name=business_name,
-                                       tenant_id=tenant_id)
-                    status.update(label="Response ready", state="complete", expanded=False)
+                    if _is_restock_question(question.strip()):
+                        budget = _extract_restock_budget(question.strip()) or 300000
+                        result = run_restock(int(budget), user_name=business_name,
+                                             shop_id=tenant_id, tenant_id=tenant_id)
+                        status.update(label="Restock review complete", state="complete", expanded=False)
+                    else:
+                        contextual_question = _copilot_context(summary, history, question.strip())
+                        result = run_agent(contextual_question, user_name=business_name,
+                                           tenant_id=tenant_id)
+                        status.update(label="Response ready", state="complete", expanded=False)
                 answer = result.get("final_text", "The assistant returned no response.")
                 result_rows = _result_rows_for_export(result)
                 _save_copilot_turn(tenant_id, question.strip(), answer,
-                                   result.get("latency_s"), result_rows)
+                                   result.get("latency_s"), result_rows,
+                                   result.get("tool_calls", []))
                 with st.chat_message("user", avatar="🙋"):
                     st.write(question.strip())
                 with st.chat_message("assistant", avatar="🤖"):
                     st.markdown(answer)
                     if result_rows:
                         _render_csv_download(result_rows, tenant_id, len(history))
-                    st.caption(f"Run {result.get('run_id', 'n/a')} · {result.get('latency_s', 0)} seconds")
-                if result.get("drafts_created"):
+                    if result.get("tool_calls"):
+                        _render_tool_evidence(result["tool_calls"], len(history))
+                    loop = result.get("loop") or {}
+                    run_id = result.get("run_id", loop.get("run_id", "n/a"))
+                    latency = result.get("latency_s", loop.get("latency_s", 0))
+                    st.caption(f"Run {run_id} · {latency} seconds")
+                agent_state = result.get("state", {})
+                created_ids = agent_state.get("drafts_created", result.get("drafts_created", []))
+                if created_ids:
+                    st.session_state[f"restock_handoff_{tenant_id}"] = {
+                        "draft_id": created_ids[0],
+                        "timeline": agent_state.get("timeline", []),
+                        "plan": agent_state.get("plan"),
+                        "ai_summary": answer,
+                        "sources": ["current_stock.csv", "past_purchases.csv", "supplier_quotes.csv"],
+                    }
                     st.session_state["_next_workspace_page"] = "Approvals"
                     st.rerun()
             except Exception as exc:
                 st.error(f"The assistant could not complete this request: {type(exc).__name__}: {exc}")
+    # Auto-scroll the transcript to the bottom after every turn so the newest
+    # message is always visible above the chat input dock (see CSS in the head).
+    st.markdown(
+        '<script>(function(){'
+        'var t=document.querySelector(".st-key-copilot_transcript");'
+        'if(!t)return;'
+        'function scroll(){t.scrollTop=t.scrollHeight;}'
+        'scroll();'
+        'var mo=new MutationObserver(function(){'
+        'window.requestAnimationFrame(scroll);'
+        '});'
+        'mo.observe(t,{childList:true,subtree:true,characterData:true});'
+        'window.__copilot_observer=mo;'
+        '})();</script>', unsafe_allow_html=True)
 
 
 def _queue_assistant_prompt(prompt: str, tenant_id: str) -> None:
     """Turn a suggested prompt into a normal chat message on the next run."""
     st.session_state[f"assistant_queued_question_{tenant_id}"] = prompt
+
+
+# ---------------------------------------------------------------------------
+# Restock routing for the chat copilot
+# ---------------------------------------------------------------------------
+# The chat is normally answered by run_agent (the tool agent). That loop calls
+# the model, so when the free-tier quota is exhausted (HTTP 429) every
+# restock question in chat fails. run_restock has a deterministic fallback
+# (restock_agent._deterministic_fallback) that builds the plan and draft from
+# the same Python tools with no model call, so restock questions are routed
+# there when the wording is clearly a restock request.
+_RESTOCK_PATTERNS = (
+    "restock", "reorder", "re-order", "re order", "plan a restock",
+    "plan restock", "buy", "order", "procure", "procurement", "stock up",
+    "what should we buy", "what should we order", "weekly restock",
+)
+
+
+def _is_restock_question(question: str) -> bool:
+    """Return True when the wording is clearly a restock request."""
+    lower = question.lower()
+    return any(pattern in lower for pattern in _RESTOCK_PATTERNS)
+
+
+def _extract_restock_budget(question: str) -> int | None:
+    """Pull a UGX budget out of a restock question, or None when none is given."""
+    match = re.search(r"(\d{1,3}(?:[,\s]\d{3})*|\d{4,})\s*(?:ugx|shillings|shs)?",
+                      question, re.IGNORECASE)
+    if not match:
+        return None
+    digits = match.group(1).replace(",", "").replace(" ", "")
+    try:
+        return int(digits)
+    except ValueError:
+        return None
 
 
 def _result_rows_for_export(result: dict) -> list[dict]:
@@ -568,6 +661,25 @@ def _render_csv_download(rows: list[dict], tenant_id: str, turn_index: int,
                        width="content")
 
 
+def _render_tool_evidence(tool_calls: list[dict], turn_index: int) -> None:
+    """Show auditable tool results and source records without exposing model internals."""
+    if not tool_calls:
+        return
+    with st.expander(f"Evidence checked · {len(tool_calls)} record lookup(s)"):
+        for index, call in enumerate(tool_calls):
+            tool_name = str(call.get("name", "record lookup"))
+            status = str(call.get("status", "unknown"))
+            with st.container(border=True):
+                st.markdown(f"**{html.escape(tool_name.replace('_', ' ').title())}** · "
+                            f"`{html.escape(status)}`")
+                arguments = call.get("args")
+                if arguments:
+                    st.caption(f"Lookup: {arguments}")
+                result = call.get("result")
+                if result is not None:
+                    st.json(result, expanded=index == 0 and turn_index < 2)
+
+
 def _copilot_context(summary: str, history: list[dict], question: str) -> str:
     """Build a small, tenant-local prompt with only compact history and recent turns."""
     return build_copilot_context(summary, history, question)
@@ -575,15 +687,19 @@ def _copilot_context(summary: str, history: list[dict], question: str) -> str:
 
 def _save_copilot_turn(tenant_id: str, question: str, answer: str,
                        latency_s: float | None = None,
-                       result_rows: list[dict] | None = None) -> None:
+                       result_rows: list[dict] | None = None,
+                       tool_calls: list[dict] | None = None) -> None:
     """Keep four recent turns and compact older exchanges without another model call."""
     history_key = f"copilot_history_{tenant_id}"
     summary_key = f"copilot_summary_{tenant_id}"
     history = list(st.session_state.get(history_key, []))
     summary = st.session_state.get(summary_key, "")
     summary, history = compact_copilot_turn(summary, history, question, answer, latency_s)
-    if history and result_rows:
-        history[-1]["result_rows"] = result_rows
+    if history:
+        if result_rows:
+            history[-1]["result_rows"] = result_rows
+        if tool_calls:
+            history[-1]["tool_calls"] = tool_calls
     st.session_state[history_key] = history
     st.session_state[summary_key] = summary.strip()
 
@@ -597,14 +713,13 @@ def _clear_copilot_context(tenant_id: str) -> None:
 
 
 def render_restock_page(tenant_id: str, business_name: str) -> None:
-    """Build and save a tenant-scoped reorder draft for human review."""
-    _page_header("restock", "Restock AI", "Build a budget-aware draft from this shop's own stock, prices and purchase history.", "AI-ASSISTED · HUMAN-APPROVED")
+    """Ask the AI agent to prepare a tenant-scoped draft for human review."""
+    _page_header("restock", "Restock AI", "The AI weighs this shop's stock, purchase history, budget and supplier choices.", "AI-PLANNED · HUMAN-APPROVED")
     with st.form(f"restock_business_{tenant_id}"):
         budget = st.number_input("Procurement cash budget (UGX)", min_value=1,
                                  step=10000, value=300000, key=f"restock_budget_{tenant_id}")
-        choice = st.radio("Planning method", ["Quick deterministic plan", "AI agent plan (slower)"],
-                          horizontal=True, key=f"restock_method_{tenant_id}")
-        submitted = st.form_submit_button("Build restock draft", type="primary", width="stretch")
+        st.caption("The AI chooses priorities and supplier trade-offs from your records. Python checks every figure and the budget; you approve or reject the saved draft.")
+        submitted = st.form_submit_button("Ask AI to plan restock", type="primary", width="stretch")
     if not submitted:
         return
     inventory = procurement.get_inventory(tenant_id=tenant_id)
@@ -612,13 +727,10 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
         st.info("Add this shop's stock items in Operations → Stock before planning a reorder.")
         return
     try:
-        if choice == "AI agent plan (slower)":
-            with st.status("Reviewing this business's stock…", expanded=True) as status:
-                result = run_restock(int(budget), user_name=business_name,
-                                     shop_id=tenant_id, tenant_id=tenant_id)
-                status.update(label="Restock review complete", state="complete", expanded=False)
-        else:
-            result = _create_deterministic_draft(int(budget), tenant_id, business_name)
+        with st.status("AI is reviewing stock, purchase history and supplier quotes…", expanded=True) as status:
+            result = run_restock(int(budget), user_name=business_name,
+                                 shop_id=tenant_id, tenant_id=tenant_id)
+            status.update(label="AI restock review complete", state="complete", expanded=False)
         state = result.get("state", {})
         plan = state.get("plan")
         if plan and plan.get("included"):
@@ -634,84 +746,21 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
         if plan and plan.get("needs_human"):
             st.info(f"{len(plan['needs_human'])} item(s) need a quote or purchase history before they can be priced.")
         st.write(result.get("final_text", result.get("outcome", "No summary returned.")))
+        if result.get("outcome") == "HANDOFF_MODEL_UNAVAILABLE":
+            st.warning("No draft was saved because the AI could not complete its review. Your records are unchanged; retry when the AI service is available.")
         created = state.get("drafts_created", [])
         if created:
             st.success(f"Draft {created[0]} is saved to this business's approvals queue.")
             st.info("This is a draft only. Review it under Approvals before making any purchase.")
             st.session_state[f"restock_handoff_{tenant_id}"] = {
                 "draft_id": created[0], "timeline": state.get("timeline", []),
-                "plan": plan, "sources": ["current_stock.csv", "past_purchases.csv", "supplier_quotes.csv"],
+                "plan": plan, "ai_summary": result.get("final_text", ""),
+                "sources": ["current_stock.csv", "past_purchases.csv", "supplier_quotes.csv"],
             }
             st.session_state["_next_workspace_page"] = "Approvals"
             st.rerun()
     except Exception as exc:
         st.error(f"Restock planning failed: {type(exc).__name__}: {exc}")
-
-
-def _create_deterministic_draft(budget: int, tenant_id: str, business_name: str) -> dict:
-    """Save an offline-ready quote-based draft when no model call is available."""
-    from tools import registry
-    from state import StateManager, WorkflowStage
-
-    context = {"created_by": business_name, "tenant_id": tenant_id, "user_id": "default-user"}
-    low, status = registry.execute_tool("get_low_stock", {}, context=context)
-    if status != "ok":
-        raise ValueError(low.get("error", "Could not read this shop's low stock."))
-    if not low["items"]:
-        return {"outcome": "NOTHING_TO_DO", "final_text": "No items are below their reorder point."}
-    plan, status = registry.execute_tool("plan_within_budget", {
-        "items": [row["item_id"] for row in low["items"]], "budget_ugx": budget}, context=context)
-    if status != "ok":
-        raise ValueError(plan.get("error", "Could not build a restock plan."))
-    if not plan["included"]:
-        return {"outcome": "NEEDS_HUMAN", "state": {"plan": plan},
-                "final_text": "No priced reorder fits this budget. Add supplier quotes or purchase history first."}
-    if int(plan["planned_total_ugx"]) > budget:
-        raise ValueError("The planned total exceeded this shop's budget; no draft was saved.")
-
-    # Create a real workflow session so the Approval screen can enforce this
-    # budget and the state machine can record the eventual human decision.
-    state_mgr = StateManager()
-    try:
-        session = state_mgr.create_session(shop_id=tenant_id, user_name=business_name,
-                                           budget_ugx=budget)
-        state_mgr.transition_to(session.session_id, WorkflowStage.SENSING_INVENTORY,
-                                "Checking this business's low stock")
-        state_mgr.update_session(session.session_id, low_stock_count=len(low["items"]))
-        state_mgr.transition_to(session.session_id, WorkflowStage.PLANNING_RESTOCK,
-                                "Building a deterministic budget plan")
-        state_mgr.transition_to(session.session_id, WorkflowStage.DRAFTING_ORDER,
-                                "Saving a tenant-scoped draft")
-        draft, status = registry.execute_tool("draft_requisition", {
-            "items": [row["item_id"] for row in plan["included"]]}, context=context)
-        if status != "ok":
-            raise ValueError(draft.get("error", "Could not save the reorder draft."))
-        if int(draft["estimated_budget_ugx"]) > budget:
-            raise ValueError("The saved estimate exceeded the budget; check the plan and draft calculation.")
-        state_mgr.update_session(session.session_id, draft_id=draft["draft_id"],
-                                 draft_total_ugx=draft["estimated_budget_ugx"],
-                                 approval_status="AWAITING_APPROVAL")
-        state_mgr.transition_to(session.session_id, WorkflowStage.AWAITING_APPROVAL,
-                                "Waiting for a human review")
-    except Exception:
-        try:
-            if "session" in locals():
-                state_mgr.transition_to(session.session_id, WorkflowStage.TERMINATED,
-                                        "Restock draft failed")
-        except Exception:
-            pass
-        raise
-    finally:
-        state_mgr.close()
-    timeline = [
-        {"phase": "SENSE", "detail": f"Read {low['count']} low-stock items", "source": "current_stock.csv"},
-        {"phase": "PLAN", "detail": f"Included {len(plan['included'])} item(s); deferred {len(plan['deferred'])}",
-         "source": "current_stock.csv, past_purchases.csv, supplier_quotes.csv"},
-        {"phase": "DRAFT", "detail": f"Saved {draft['draft_id']} for human review", "source": "tenant-scoped approvals ledger"},
-    ]
-    return {"outcome": "DRAFT_READY", "final_text": "A quote-based draft is ready for human review.",
-            "state": {"plan": plan, "drafts_created": [draft["draft_id"]], "timeline": timeline,
-                      "session_id": session.session_id}}
 
 
 def render_stock_page(tenant_id: str) -> None:
@@ -987,21 +1036,23 @@ def render_policy_editor(tenant_id: str) -> None:
 
 
 def render_approvals_page(tenant_id: str, business_name: str) -> None:
-    """Let a human review, edit and decide this shop's recorded reorder drafts."""
-    _page_header("check", "Approvals", "Review the AI's draft, adjust quantities and record a human decision.", "OWNER / MANAGER REVIEW")
+    """Let a human review and decide this shop's recorded reorder drafts.
+
+    One draft at a time: a card per line with the AI's reasoning, then two big
+    buttons (Approve / Deny) plus a comments box. No quantity editor here - the
+    shop owner can still change a quantity in Operations if they want to.
+    """
+    _page_header("check", "Approvals", "Review the AI's draft and record your decision.", "OWNER / MANAGER REVIEW")
     handoff = st.session_state.pop(f"restock_handoff_{tenant_id}", None)
     if handoff:
         st.success(f"Restock draft {handoff['draft_id']} is ready here for your review.")
         with st.expander("Restock process & sources", expanded=True):
+            if handoff.get("ai_summary"):
+                st.markdown("**AI decision brief**")
+                st.markdown(handoff["ai_summary"])
             for step in handoff.get("timeline", []):
                 st.markdown(f"**{step.get('phase', 'STEP')}** · {step.get('detail', '')} · Source: {step.get('source', 'agent trace')}")
-            st.caption("Records checked: " + ", ".join(handoff.get("sources", [])))
-            plan_rows = [{"Item": row.get("item_name"), "Quantity": row.get("recommended_qty"),
-                          "Supplier": row.get("selected_supplier", "—"),
-                          "Estimated cost (UGX)": row.get("cost_ugx", row.get("total_cost_ugx", 0))}
-                         for row in handoff.get("plan", {}).get("included", [])]
-            if plan_rows:
-                _render_csv_download(plan_rows, tenant_id, 0, key_prefix="restock_csv")
+            st.markdown("**Records checked:** " + ", ".join(handoff.get("sources", [])))
     drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     waiting = [draft for draft in drafts if draft["status"] == procurement.DRAFT_STATUS]
     if not waiting:
@@ -1009,44 +1060,66 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
         if drafts:
             st.markdown("#### Recorded reorder history")
             st.dataframe(pd.DataFrame([{"Draft ID": d["draft_id"], "Status": d["status"],
-                                       "Created": d["created_at"], "Estimated (UGX)": d["estimated_budget_ugx"]}
-                                      for d in drafts]), width="stretch", hide_index=True)
+                                        "Created": d["created_at"], "Estimated (UGX)": d["estimated_budget_ugx"]}
+                                       for d in drafts]), width="stretch", hide_index=True)
         return
     selected = st.selectbox("Draft", waiting, format_func=lambda d: d["draft_id"])
     draft = approvals.load_draft(selected["draft_id"], tenant_id, "default-user")
     st.markdown(f"#### Reorder {draft['draft_id']}")
+    st.caption(f"Created by {draft['created_by']} · {draft['created_at']} · total UGX {draft['estimated_budget_ugx']:,}")
+    st.info("This draft is saved for review only. No supplier has been contacted and no order has been placed.")
+    if draft.get("ai_selection_rationale"):
+        st.markdown("### AI decision brief")
+        st.markdown(draft["ai_selection_rationale"])
+    st.markdown("### Why the AI suggested each line")
+    st.caption("The AI chooses priorities and supplier trade-offs. Every figure is independently calculated and budget-checked in Python.")
     for line in draft["lines"]:
-        st.write(f"{line['item_name']} · {line['recommended_qty']} units · UGX {line['total_cost_ugx']:,}")
+        with st.container(border=True):
+            head = st.columns([3, 1, 2])
+            head[0].markdown(f"**{line['item_name']}**  ·  `{line['item_id']}`")
+            head[1].metric("Qty", line["recommended_qty"])
+            head[2].metric("Line total", f"UGX {line['total_cost_ugx']:,}")
+            st.markdown(f"**Stock now:** {line['current_stock']} · **Reorder point:** {line['reorder_point']} · "
+                        f"**Supplier:** {line.get('selected_supplier', '—')} · "
+                        f"**Unit price:** UGX {line['unit_price_ugx']:,} · "
+                        f"**Delivers in:** {line.get('lead_time_days', 0)} day(s)")
+            st.markdown(f"*How much to order:* {line.get('quantity_basis', '—')}")
+            if line.get("supplier_reason"):
+                st.markdown(f"**Verified quote comparison:** {line['supplier_reason']}")
+            if line.get("ai_supplier_rationale"):
+                st.markdown(f"**AI's reason for this choice:** {line['ai_supplier_rationale']}")
+            alternatives = [option for option in line.get("supplier_options", [])
+                            if option["supplier_name"] != line.get("selected_supplier")]
+            if alternatives:
+                with st.expander(f"Other quotes for {line['item_name']}"):
+                    for option in alternatives:
+                        st.write(f"{option['supplier_name']}: UGX {option['unit_price_ugx']:,} each · "
+                                 f"MOQ {option['min_order_qty']} · {option['lead_time_days']} day(s) to deliver")
+            if line.get("requires_override"):
+                st.warning(f"⚠️  This line is above the 200% safety cap ({line.get('safety_cap')}); an override reason is required to approve.")
     st.metric("Draft total", f"UGX {draft['estimated_budget_ugx']:,}")
-    with st.expander("Adjust a suggested quantity"):
-        with st.form(f"edit_reorder_quantity_{tenant_id}"):
-            line_id = st.selectbox("Item", [line["item_id"] for line in draft["lines"]],
-                                   key=f"approval_item_{tenant_id}",
-                                   format_func=lambda key: next(line["item_name"] for line in draft["lines"] if line["item_id"] == key))
-            new_qty = st.number_input("New quantity", min_value=0, step=1, key=f"approval_qty_{tenant_id}")
-            edit_reason = st.text_input("Reason for changing the AI suggestion", key=f"approval_edit_reason_{tenant_id}")
-            edit_submitted = st.form_submit_button("Save quantity change")
-        if edit_submitted:
-            try:
-                approvals.edit_quantity(draft["draft_id"], line_id, int(new_qty), business_name,
-                                        edit_reason, tenant_id=tenant_id, user_id="default-user")
-                st.success("Edited quantity saved and audited for this business.")
-                st.rerun()
-            except Exception as exc:
-                st.error(str(exc))
+    st.markdown("---")
     with st.form(f"approval_decision_{tenant_id}"):
-        decision = st.selectbox("Decision", ["APPROVED", "REJECTED"], key=f"approval_decision_{tenant_id}")
-        reason = st.text_input("Reason (required for rejection or an override)", key=f"approval_reason_{tenant_id}")
-        confirmation = st.text_input(f"Type {decision} to confirm", key=f"approval_confirmation_{tenant_id}")
-        submitted = st.form_submit_button("Record human decision", type="primary")
-    if submitted:
-        if confirmation != decision:
-            st.error(f"Type {decision} exactly to confirm this decision.")
+        reason = st.text_area("Comment (required to reject, or to note an override)",
+                              key=f"approval_reason_{tenant_id}", height=80,
+                              placeholder="Add a note, or explain why this draft should be rejected.")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            approve_clicked = st.form_submit_button("Approve draft", type="primary", width="stretch")
+        with col_b:
+            reject_clicked = st.form_submit_button("Reject draft", width="stretch")
+    if approve_clicked or reject_clicked:
+        chosen = "APPROVED" if approve_clicked else "REJECTED"
+        if chosen == "REJECTED" and not reason.strip():
+            st.error("A reason is required to deny a draft.")
+            return
+        if chosen == "APPROVED" and draft.get("requires_override_any") and not reason.strip():
+            st.error("This draft has a line above the 200% cap; an override reason is required to approve it.")
             return
         try:
-            approvals.decide(draft["draft_id"], decision, business_name, reason,
+            approvals.decide(draft["draft_id"], chosen, business_name, reason,
                              tenant_id=tenant_id, user_id="default-user")
-            st.success(f"{decision.title()} decision recorded.")
+            st.success(f"{chosen.title()} decision recorded.")
             st.rerun()
         except Exception as exc:
             st.error(str(exc))

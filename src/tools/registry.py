@@ -69,6 +69,18 @@ _ITEM_PARAM = {
 }
 
 TOOL_REGISTRY = {
+    "get_restock_options": {
+        "function": procurement.get_restock_options,
+        "side_effect": "none",
+        "context_args": ["tenant_id"],
+        "declaration": {
+            "name": "get_restock_options",
+            "description": ("Gather every low-stock item, exact history-based reorder quantity, and all "
+                            "supplier price, MOQ and lead-time options. Python supplies the evidence; "
+                            "the AI chooses the priority and supplier trade-offs."),
+            "parameters_json_schema": {"type": "object", "properties": {}, "required": []},
+        },
+    },
     "get_low_stock": {
         "function": procurement.get_low_stock,
         "side_effect": "none",
@@ -121,7 +133,18 @@ TOOL_REGISTRY = {
                 "type": "object",
                 "properties": {"items": {"type": "array", "items": _ITEM_PARAM, "minItems": 1,
                                          "maxItems": procurement.MAX_ITEMS_PER_DRAFT,
-                                         "description": "Items the user asked for (IDs or names)."}},
+                                         "description": "Items selected by the AI plan (IDs or names)."},
+                    "supplier_choices": {
+                        "type": "object", "additionalProperties": {"type": "string"},
+                        "description": "AI-selected supplier name by item ID, validated against live quotes.",
+                    },
+                    "supplier_reasons": {
+                        "type": "object", "additionalProperties": {"type": "string"},
+                        "description": "Brief evidence-based AI rationale for each selected supplier.",
+                    },
+                    "selection_rationale": {
+                        "type": "string", "description": "Brief summary of the AI's selection criteria."
+                    }},
                 "required": ["items"],
             },
         },
@@ -132,10 +155,11 @@ TOOL_REGISTRY = {
         "context_args": ["tenant_id"],
         "declaration": {
             "name": "plan_within_budget",
-            "description": ("Decide which low-stock items fit a budget, most urgent first "
-                            "(stock / reorder point). Returns 'included' items to draft, 'deferred' "
+            "description": ("Validate the AI's priority order and supplier choices, then calculate "
+                            "which low-stock items fit the budget. Returns 'included' items to draft, 'deferred' "
                             "items that do not fit, and 'needs_human' items that cannot be costed "
-                            "(no purchase history or no quote). Writes nothing."),
+                            "(no purchase history or no quote). An omitted priority order retains "
+                            "the urgency-first compatibility behavior. Writes nothing."),
             "parameters_json_schema": {
                 "type": "object",
                 "properties": {
@@ -143,6 +167,21 @@ TOOL_REGISTRY = {
                               "description": "Items to consider, normally every low item ID."},
                     "budget_ugx": {"type": "integer", "minimum": 1,
                                    "description": "Spending limit in UGX. Omit if the user gave no budget."},
+                    "priority_order": {
+                        "type": "array", "items": _ITEM_PARAM, "minItems": 1, "maxItems": 50,
+                        "description": "AI's priority ordering of every requested item ID."
+                    },
+                    "supplier_choices": {
+                        "type": "object", "additionalProperties": {"type": "string"},
+                        "description": "AI-selected supplier name by item ID, validated against live quotes."
+                    },
+                    "supplier_reasons": {
+                        "type": "object", "additionalProperties": {"type": "string"},
+                        "description": "Brief evidence-based AI rationale for each selected supplier."
+                    },
+                    "priority_rationale": {
+                        "type": "string", "description": "Brief evidence-based explanation of the priority order."
+                    },
                 },
                 "required": ["items"],
             },
@@ -273,6 +312,12 @@ def _validate_args(name: str, args: dict, schema: dict) -> str | None:
             item_type = _PY_TYPES.get(spec.get("items", {}).get("type"))
             if item_type and not all(isinstance(v, item_type) for v in value):
                 return f"INVALID_PARAMETER: every entry of '{key}' must be {spec['items']['type']}"
+        if spec.get("type") == "object":
+            additional = spec.get("additionalProperties")
+            if additional:
+                expected_value = _PY_TYPES.get(additional.get("type"))
+                if expected_value and not all(isinstance(v, expected_value) for v in value.values()):
+                    return f"INVALID_PARAMETER: every value of '{key}' must be {additional['type']}"
         if spec.get("type") == "string" and not value.strip():
             return f"INVALID_PARAMETER: '{key}' must not be empty"
         if spec.get("type") == "integer":

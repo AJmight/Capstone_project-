@@ -12,7 +12,7 @@ manners) enforces the contract:
     double-drafting model  -> second draft -> POSTCONDITION_FAILED (at most one draft)
     looping model          -> repeated calls blocked, then iteration limit -> HANDOFF
     off-contract model     -> compare_supplier_quotes blocked (NOT_IN_TASK_CONTRACT)
-    model unavailable      -> deterministic fallback (no model call): drafts what fits the budget
+    model unavailable      -> safe hand-off: no draft is created without an AI decision
     forgetful model        -> summary without the approval status line -> POSTCONDITION_FAILED
     false draft claim      -> fake "awaiting approval" summary with no draft -> corrected (F-13)
     tool-hungry model      -> cut off after MAX_TOOL_CALLS executions -> HANDOFF_TOOL_CALL_LIMIT
@@ -87,55 +87,108 @@ def _last_tool_result(contents):
 
 
 def _sense(contents):
-    """Read the low item IDs and the budget back out of the [RESTOCK TASK] message."""
+    """Read the tool-computed options and budget from the agent's task message."""
     first = contents[0].parts[0].text
-    ids = re.findall(r'"item_id": "(ITM\d+)"', first)
+    sense_text = first.split("[SENSE]\n", 1)[1]
+    evidence, _ = json.JSONDecoder().raw_decode(sense_text)
+    ids = [item["item_id"] for item in evidence["items"]]
     budget = int(re.search(r"budget_ugx=(\d+)", first).group(1))
-    return ids, budget
+    return ids, budget, evidence["items"]
+
+
+def _plan_args(ids, budget, evidence):
+    """Script the model's evidence-based urgency and cheapest-quote choices."""
+    by_id = {item["item_id"]: item for item in evidence}
+    priorities = sorted(ids, key=lambda item_id: (
+        by_id[item_id]["current_stock"] / max(by_id[item_id]["reorder_point"], 1), item_id))
+    choices = {item_id: min(by_id[item_id]["supplier_options"],
+                            key=lambda quote: (quote["unit_price_ugx"], quote["lead_time_days"]))[
+                                "supplier_name"]
+               for item_id in ids if by_id[item_id]["supplier_options"]}
+    return {"items": ids, "budget_ugx": budget, "priority_order": priorities,
+            "supplier_choices": choices,
+            "supplier_reasons": {item_id: "Selected the lowest quoted unit price for this test."
+                                 for item_id in choices},
+            "priority_rationale": "Prioritized the lowest recorded stock-to-reorder-point ratios."}
+
+
+def _draft_args(included, rationale="AI prioritized the most urgent priced items within budget."):
+    choices = {item["item_id"]: item["selected_supplier"] for item in included}
+    return {"items": [item["item_id"] for item in included],
+            "supplier_choices": choices,
+            "supplier_reasons": {item["item_id"]: item.get("selection_reason", "")
+                                 for item in included if item.get("selection_reason")},
+            "selection_rationale": rationale}
 
 
 STATUS_LINE = "Status: DRAFT - AWAITING HUMAN APPROVAL. A manager must review and approve it."
 
 
 def ideal_policy(contents):
-    """What a well-behaved model does under prompt v2.1.0 Section 7."""
+    """A grounded AI chooses priorities and suppliers, then drafts the validated plan."""
     name, result = _last_tool_result(contents)
-    ids, budget = _sense(contents)
+    ids, budget, evidence = _sense(contents)
     if name is None:
-        return _fc(("plan_within_budget", {"items": ids, "budget_ugx": float(budget)}))  # floats, like Gemini
+        return _fc(("plan_within_budget", _plan_args(ids, budget, evidence)))
     if "error" in result and result["error"].startswith("SERVICE_UNAVAILABLE"):
-        return _fc((name, {"items": ids, "budget_ugx": float(budget)}))                  # one retry
+        args = (_plan_args(ids, budget, evidence) if name == "plan_within_budget"
+                else {"items": [item["item_id"] for item in result.get("included", [])]})
+        return _fc((name, args))
     if "error" in result:                                                                # give up honestly
         return _text(f"I could not complete the restock: {result['error']}. No draft was created.")
     if name == "plan_within_budget":
-        inc = [i["item_id"] for i in result["included"]]
-        return _fc(("draft_requisition", {"items": inc})) if inc else _text("Nothing fits the budget.")
+        return _fc(("draft_requisition", _draft_args(result["included"],
+                                                       result.get("priority_rationale", "")))) \
+            if result["included"] else _text("Nothing fits the budget; other items need human input.")
+    return _text(f"Draft {result.get('draft_id')} created.\n{STATUS_LINE}")
+
+
+def alternative_supplier_policy(contents):
+    """Choose a faster, slightly dearer supplier and preserve that choice in the saved draft."""
+    name, result = _last_tool_result(contents)
+    ids, budget, evidence = _sense(contents)
+    if name is None:
+        args = _plan_args(ids, budget, evidence)
+        args["supplier_choices"]["ITM001"] = "Nakawa Stationers"
+        args["supplier_reasons"]["ITM001"] = (
+            "The quote is slightly higher than Kampala's but offers a one-day faster delivery.")
+        return _fc(("plan_within_budget", args))
+    if name == "plan_within_budget":
+        return _fc(("draft_requisition", _draft_args(result["included"],
+                                                       result["priority_rationale"])))
     return _text(f"Draft {result.get('draft_id')} created.\n{STATUS_LINE}")
 
 
 def greedy_policy(contents):
     """Ignores the plan and drafts every low item (should be caught by post-conditions)."""
     name, result = _last_tool_result(contents)
-    ids, budget = _sense(contents)
+    ids, budget, evidence = _sense(contents)
     if name is None:
-        return _fc(("plan_within_budget", {"items": ids, "budget_ugx": budget}))
+        return _fc(("plan_within_budget", _plan_args(ids, budget, evidence)))
     if name == "plan_within_budget":
-        return _fc(("draft_requisition", {"items": ids}))
+        options = {item["item_id"]: item["supplier_options"][0]["supplier_name"]
+                   for item in evidence if item["supplier_options"]}
+        return _fc(("draft_requisition", {"items": ids, "supplier_choices": options}))
     return _text(STATUS_LINE)
 
 
 def double_draft_policy(contents):
     """Drafts, then drafts again with a different list (second draft must be caught)."""
     name, result = _last_tool_result(contents)
-    ids, budget = _sense(contents)
+    ids, budget, evidence = _sense(contents)
     if name is None:
-        return _fc(("plan_within_budget", {"items": ids, "budget_ugx": budget}))
+        return _fc(("plan_within_budget", _plan_args(ids, budget, evidence)))
     drafts = sum(1 for c in contents for p in (c.parts or [])
                  if getattr(p, "function_response", None) and p.function_response.name == "draft_requisition")
     if drafts == 0:
-        return _fc(("draft_requisition", {"items": ["ITM001"]}))
+        plan = next((p.function_response.response for c in contents for p in (c.parts or [])
+                     if getattr(p, "function_response", None)
+                     and p.function_response.name == "plan_within_budget"), {})
+        return _fc(("draft_requisition", _draft_args(plan.get("included", [])[:1])))
     if drafts == 1:
-        return _fc(("draft_requisition", {"items": ["ITM003"]}))
+        item = next((i for i in evidence if i["item_id"] == "ITM003"), None)
+        choices = {"ITM003": item["supplier_options"][0]["supplier_name"]} if item and item["supplier_options"] else {}
+        return _fc(("draft_requisition", {"items": ["ITM003"], "supplier_choices": choices}))
     return _text(STATUS_LINE)
 
 
@@ -208,6 +261,33 @@ def test_offline_02_handoffs_built_from_state():
             assert item in h, item
 
 
+def test_offline_02b_ai_supplier_tradeoff_is_validated_and_saved():
+    """The AI may select a non-cheapest quoted supplier; Python recalculates and persists it."""
+    with sandbox(), fake_model(alternative_supplier_policy):
+        rec = restock_agent.run_restock(50000)
+    assert rec["outcome"] == "DRAFT_READY", rec["outcome"]
+    line = next(line for line in rec["state"]["draft"]["lines"] if line["item_id"] == "ITM001")
+    assert line["selected_supplier"] == "Nakawa Stationers"
+    assert line["unit_price_ugx"] == 500 and line["total_cost_ugx"] == 32500
+    assert "Kampala Office Supplies at UGX 476" in line["supplier_reason"]
+    assert "one-day faster" in line["ai_supplier_rationale"]
+    assert all(check["passed"] for check in rec["state"]["postconditions"])
+
+
+def test_offline_02c_invalid_ai_supplier_selection_is_rejected_before_planning():
+    """Python refuses a supplier that is not present in the shop's quotes."""
+    with sandbox():
+        ids = ["ITM001"]
+        result, status = restock_agent.execute_tool(
+            "plan_within_budget",
+            {"items": ids, "budget_ugx": 50000, "priority_order": ids,
+             "supplier_choices": {"ITM001": "Imaginary Supplier"},
+             "supplier_reasons": {"ITM001": "They claim to be cheapest."},
+             "priority_rationale": "This is a test selection."})
+        assert status == "tool_error"
+        assert result["error"].startswith("INVALID_PARAMETER")
+
+
 def test_offline_03_failure_then_recovery():
     """plan_within_budget fails once (injected) -> retried once -> recovery recorded -> DRAFT_READY."""
     with sandbox(), fake_model(ideal_policy):
@@ -267,23 +347,20 @@ def test_offline_09_off_contract_tool_blocked():
         assert err.startswith("NOT_IN_TASK_CONTRACT") and not rec["state"]["drafts_created"]
 
 
-def test_offline_10_model_unavailable_falls_back_to_deterministic_plan():
-    """Every model 503 -> the run falls back to the deterministic plan (no model call)
-    and still drafts what fits the budget, so the shop owner is never blocked by quota."""
+def test_offline_10_model_unavailable_hands_off_without_draft():
+    """Every model 503 -> clear hand-off; no non-AI restock plan or draft is created."""
     with sandbox(), fake_model(unavailable=True):
         rec = restock_agent.run_restock(300000)
-    # The fallback path is recorded in the trace and the outcome is still decided by code.
-    assert rec["outcome"] == "DRAFT_READY", rec["outcome"]
-    assert rec["state"]["drafts_created"], "the fallback must still create a draft"
-    assert "deterministic-fallback" in rec["loop"]["models_used"]
-    assert "AWAITING HUMAN APPROVAL" in rec["final_text"].upper(), rec["final_text"]
+    assert rec["outcome"] == "HANDOFF_MODEL_UNAVAILABLE", rec["outcome"]
+    assert not rec["state"]["drafts_created"], "a draft requires an AI decision"
+    assert "try again later" in rec["final_text"].lower()
 
 
-def test_offline_10b_model_unavailable_nothing_fits():
-    """Same fallback, but a budget too small for anything -> NOTHING_FITS_BUDGET, no draft."""
+def test_offline_10b_model_unavailable_never_creates_a_draft():
+    """An unavailable model never creates a draft, regardless of the budget."""
     with sandbox(), fake_model(unavailable=True):
         rec = restock_agent.run_restock(10000)
-    assert rec["outcome"] == "NOTHING_FITS_BUDGET", rec["outcome"]
+    assert rec["outcome"] == "HANDOFF_MODEL_UNAVAILABLE", rec["outcome"]
     assert not rec["state"]["drafts_created"]
 
 
@@ -353,7 +430,7 @@ def test_offline_16_false_draft_claim_corrected():
 def test_offline_17_tool_call_limit():
     """A model asking for many different tool calls is cut off at MAX_TOOL_CALLS (LIMIT) -> HANDOFF."""
     def greedy_tools_policy(contents):
-        ids, _ = _sense(contents)
+        ids, _, _ = _sense(contents)
         turn = sum(1 for c in contents if c.role == "model") + 1
         # 4 DIFFERENT calls per turn (distinct budgets), so the repeat guard does not stop them.
         return _fc(*[("plan_within_budget", {"items": ids, "budget_ugx": 100000 + turn * 10 + i})
