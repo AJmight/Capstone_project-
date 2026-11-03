@@ -74,9 +74,22 @@ from tool_agent import run_agent              # the bounded model <-> tool loop 
 # ---------------------------------------------------------------------------
 GOAL = ("Prepare ONE draft restock requisition within the budget and report everything that "
         "needs a human decision.")
-CONTRACT_TOOLS = {"plan_within_budget", "draft_requisition"}   # read/plan/write allow-list
-MAX_TURNS = int(os.getenv("RESTOCK_AGENT_MAX_TURNS", "5"))          # allows one recovery plus draft verification
-MAX_TOOL_CALLS = int(os.getenv("RESTOCK_AGENT_MAX_TOOL_CALLS", "8"))  # bounded plan/retry/draft budget
+# Full agentic tool allow-list: agent picks its own sensing tools, not just plan/draft.
+# This means the AI actively calls get_low_stock, compare_supplier_quotes, and
+# estimate_reorder_quantity itself rather than having code pre-sense for it.
+# Python still validates every argument and result (registry.execute_tool).
+CONTRACT_TOOLS = {
+    "get_low_stock",            # AI senses which items need restocking
+    "get_inventory",            # AI can inspect full stock if needed
+    "compare_supplier_quotes",  # AI compares prices per item itself
+    "estimate_reorder_quantity",# AI estimates how much to order per item
+    "query_purchase_history",   # AI checks purchase patterns
+    "search_policy",            # AI can look up procurement policy
+    "plan_within_budget",       # AI builds a budget-bounded plan
+    "draft_requisition",        # AI creates the DRAFT (always last)
+}
+MAX_TURNS = int(os.getenv("RESTOCK_AGENT_MAX_TURNS", "8"))           # enough for full sense→compare→plan→draft cycle
+MAX_TOOL_CALLS = int(os.getenv("RESTOCK_AGENT_MAX_TOOL_CALLS", "15")) # 8 tools with retries
 
 
 def _close_run_managers(*managers) -> None:
@@ -276,7 +289,26 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
             except Exception:
                 pass
     else:
-        # ---- 1. SENSE (code, through the registry so it is traced and validated) ----
+        # ---- 0b. Load per-shop procurement rules (optional, never crashes the run) ----
+        # shop_rules.json is written by the UI's "Procurement rules" editor.
+        # Rules examples: {"preferred_suppliers": {"pens": "John Supplies"},
+        #                  "blacklisted_suppliers": ["Cheap Mart"],
+        #                  "max_order_ugx": 500000}
+        # Python enforces these rules AFTER the AI plan; the AI is not told about them
+        # so it reasons freely, then deterministic code overrides if needed.
+        shop_rules: dict = {}
+        rules_path = Path("data") / "tenants" / tenant_id / "shop_rules.json"
+        try:
+            if rules_path.exists():
+                shop_rules = json.loads(rules_path.read_text(encoding="utf-8"))
+                state.log("RULES", f"shop rules loaded: {list(shop_rules.keys())}")
+        except Exception as _rules_err:
+            state.log("RULES", f"shop_rules.json unreadable ({_rules_err}), proceeding without rules")
+
+        # ---- 1. SENSE seed (code, through the registry so it is traced and validated) ----
+        # This initial get_restock_options call seeds the AI with starting evidence.
+        # The AI will then augment this with its own tool calls (get_low_stock,
+        # compare_supplier_quotes, estimate_reorder_quantity, etc.) inside its loop.
         if state_mgr and session:
             try:
                 state_mgr.transition_to(session.session_id, WorkflowStage.SENSING_INVENTORY, "Querying low stock")
@@ -346,6 +378,24 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
                    json.dumps(state.restock_options, indent=1))
         if mem_prompt:
             message += f"\n\n{mem_prompt}"
+        # Tell the AI it has the full set of 8 tools and describe the expected analysis order.
+        # The AI must sense, compare, plan, and only then draft — this prompt enforces that sequence.
+        message += (
+            "\n\n[TOOLS AVAILABLE]\n"
+            "You have 8 tools. Use them in this order for a thorough analysis:\n"
+            "1. get_low_stock — confirm which items are below their reorder point\n"
+            "2. compare_supplier_quotes — for each low item, compare all available supplier prices\n"
+            "3. estimate_reorder_quantity — calculate how many units to order for each item\n"
+            "4. query_purchase_history — check recent purchase patterns (optional, for context)\n"
+            "5. search_policy — check procurement policy if needed (optional)\n"
+            "6. plan_within_budget — build the final budget-bounded plan with your analysis\n"
+            "7. draft_requisition — create the DRAFT only after the plan is complete\n\n"
+            "For each item you include, explain:\n"
+            "- Which supplier you chose and why (compare prices explicitly)\n"
+            "- How many units you recommend and why\n"
+            "- What the total cost is\n\n"
+            "Your summary MUST end with: STATUS: AWAITING HUMAN APPROVAL"
+        )
 
         try:
             run = run_agent(message, user_name=user_name, max_turns=MAX_TURNS,
@@ -365,6 +415,49 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         state.postconditions = check_postconditions(state, final_text)
         for c in state.postconditions:
             state.log("POSTCONDITION", f"{'PASS' if c['passed'] else 'FAIL'} - {c['check']}: {c['detail']}")
+
+        # ---- Enforce per-shop rules on the AI's plan (deterministic override) ----
+        # The AI reasons freely about suppliers; Python then applies shop rules.
+        # This separation is deliberate: AI provides rationale, rules provide guardrails.
+        # Rules are enforced AFTER postconditions so the AI's unguided choices are logged
+        # first; overrides are auditable in the timeline under the RULES phase.
+        if shop_rules and state.draft and state.draft.get("lines"):
+            preferred = shop_rules.get("preferred_suppliers", {})   # {item_name_lower: supplier_name}
+            blacklisted = {s.lower() for s in shop_rules.get("blacklisted_suppliers", [])}
+            overridden = []
+            for line in state.draft["lines"]:
+                item_lower = line.get("item_name", "").lower()
+                chosen = line.get("selected_supplier", "")
+                # Check blacklist first — a blacklisted supplier is never allowed, regardless of price.
+                if chosen.lower() in blacklisted:
+                    # Find the next best (cheapest non-blacklisted) supplier from the line's options.
+                    alternatives = [opt for opt in line.get("supplier_options", [])
+                                    if opt["supplier_name"].lower() not in blacklisted]
+                    if alternatives:
+                        best = min(alternatives, key=lambda o: o["unit_price_ugx"])
+                        line["selected_supplier"] = best["supplier_name"]
+                        line["unit_price_ugx"] = best["unit_price_ugx"]
+                        line["total_cost_ugx"] = best["unit_price_ugx"] * line["recommended_qty"]
+                        line["ai_supplier_rationale"] += (
+                            f" [Rule override: {chosen} is blacklisted; switched to {best['supplier_name']}]"
+                        )
+                        overridden.append(f"{line['item_id']}: blacklisted {chosen} → {best['supplier_name']}")
+                # Check preferred supplier — if shop has a preferred supplier for this item, use it.
+                for key, preferred_supplier in preferred.items():
+                    if key in item_lower and chosen != preferred_supplier:
+                        # Find the preferred supplier's quote in line options, if available.
+                        pref_opt = next((opt for opt in line.get("supplier_options", [])
+                                        if opt["supplier_name"] == preferred_supplier), None)
+                        if pref_opt:
+                            line["selected_supplier"] = preferred_supplier
+                            line["unit_price_ugx"] = pref_opt["unit_price_ugx"]
+                            line["total_cost_ugx"] = pref_opt["unit_price_ugx"] * line["recommended_qty"]
+                            line["ai_supplier_rationale"] += (
+                                f" [Shop rule: prefer {preferred_supplier} for {key}]"
+                            )
+                            overridden.append(f"{line['item_id']}: preferred rule applied → {preferred_supplier}")
+            if overridden:
+                state.log("RULES", f"Shop rule overrides applied: {overridden}")
 
         # ---- 5b. WEEK 8 HARDENING: the budget ceiling is a HARD limit (F-12) ----
         # The exact total must never exceed the money the owner allocated. The

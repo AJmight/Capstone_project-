@@ -79,7 +79,7 @@ st.set_page_config(
     page_title="SME Procurement Assistant",
     page_icon="📦",
     layout="wide",                             # use the full browser width, like the mockup
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 # ---------------------------------------------------------------------------
@@ -224,6 +224,43 @@ CSS = """
   @media (min-width:900px) { .block-container { padding:1.5rem 2rem 6rem; } .st-key-workspace_nav { left:max(calc((100vw - 1280px) / 2),0px); right:max(calc((100vw - 1280px) / 2),0px); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; } }
   @media (max-width:640px) { .block-container { padding:.8rem .75rem 6rem; } .feature-strip { grid-template-columns:1fr; } .workspace-title { font-size:1.1rem; } .page-heading h1 { font-size:1.45rem; } .st-key-workspace_nav { padding-left:.4rem; padding-right:.4rem; } .st-key-workspace_nav [data-testid="stHorizontalBlock"] { gap:.08rem; } .st-key-workspace_nav .stButton > button { min-height:50px; padding:.2rem .08rem; font-size:.69rem; border-radius:11px; } .st-key-copilot_transcript [data-testid="stChatMessageContent"] { max-width:100%; padding:.68rem .78rem; } .st-key-dashboard_metrics [data-testid="stHorizontalBlock"] { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } .stock-threshold { display:none; } .stock-item-row { gap:.45rem; } }
   @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; } }
+
+  /* Stitch-inspired Morning Briefing Card */
+  .morning-briefing-card {
+    background: #ffffff;
+    border: 1px solid #e2dedb;
+    border-left: 5px solid #005c55;
+    border-radius: 14px;
+    padding: 1.1rem 1.35rem;
+    margin: 0.4rem 0 1.1rem;
+    box-shadow: 0 4px 16px rgba(28,27,27,0.05);
+  }
+  .briefing-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #005c55;
+  }
+  .briefing-alert {
+    background: #fee9e7;
+    color: #b42318;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 650;
+  }
+  [data-testid="stSidebar"] {
+    background: #fbfaf8;
+    border-right: 1px solid #e2dedb;
+  }
+  [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4 {
+    color: #1c1b1b;
+  }
+
 </style>
 """
 
@@ -304,6 +341,41 @@ def render_business_home() -> None:
     next_page = st.session_state.pop("_next_workspace_page", None)
     if next_page in WORKSPACE_PAGES:
         st.session_state["workspace_page"] = next_page
+
+    # Sleek companion sidebar: shop identity, session controls, and quick stats
+    with st.sidebar:
+        st.markdown(f"### 🏪 {html.escape(business_name)}")
+        st.caption(f"Tenant: `{tenant_id}`")
+        if st.button("➕ New Conversation", key=f"sidebar_new_chat_{tenant_id}", width="stretch"):
+            _clear_copilot_context(tenant_id)
+            st.rerun()
+        st.markdown("---")
+        st.markdown("#### Workspaces")
+        curr_page = st.session_state.get("workspace_page", "Dashboard")
+        for dest in WORKSPACE_PAGES:
+            is_active = (curr_page == dest)
+            if st.button(f"{NAV_ICONS[dest]} {dest}",
+                         key=f"sidebar_nav_{dest.lower()}",
+                         type="primary" if is_active else "secondary",
+                         width="stretch"):
+                _set_workspace_page(dest)
+                st.rerun()
+        st.markdown("---")
+        st.markdown("#### Shop Health")
+        st_status = shop_status(tenant_id)
+        if "error" not in st_status:
+            st.caption(f"📦 **{st_status['total']}** Products tracked\n\n"
+                       f"⚠️ **{st_status['low']}** Items below threshold\n\n"
+                       f"🛡️ **{st_status['waiting'] or 0}** Reorders awaiting approval")
+        st.markdown("---")
+        st.caption("🔒 **Guardrails Active**\n\n"
+                   "• Hard Budget Ceiling (UGX 500,000)\n\n"
+                   "• Human Approval Mandatory\n\n"
+                   "• Decision-001 Isolated Storage")
+        st.markdown("---")
+        if st.button("↔ Switch Shop", key="sidebar_switch_shop", width="stretch"):
+            _switch_business()
+            st.rerun()
     with st.container(key="workspace_nav"):
         nav_cols = st.columns(4)
         page = st.session_state.get("workspace_page", "Dashboard")
@@ -425,8 +497,8 @@ def render_operations_page(tenant_id: str) -> None:
     summaries[0].metric("SKUs tracked", inventory.get("count", 0))
     summaries[1].metric("Below threshold", low.get("count", 0))
     summaries[2].metric("Sales recorded", len(sales_rows))
-    stock_tab, sale_tab, purchase_tab, quote_tab, activity_tab = st.tabs(
-        ["📦 Stock", "🧾 Sales", "📥 Purchases", "🏷️ Supplier quotes", "↻ Activity"])
+    stock_tab, sale_tab, purchase_tab, quote_tab, activity_tab, import_tab = st.tabs(
+        ["📦 Stock", "🧾 Sales", "📥 Purchases", "🏷️ Supplier quotes", "↻ Activity", "📤 Import Data"])
     with stock_tab:
         render_stock_page(tenant_id)
     with sale_tab:
@@ -437,6 +509,8 @@ def render_operations_page(tenant_id: str) -> None:
         render_quote_page(tenant_id)
     with activity_tab:
         render_activity_page(tenant_id)
+    with import_tab:
+        render_import_page(tenant_id)
 
 
 def _tenant_csv(tenant_id: str, filename: str) -> Path:
@@ -480,6 +554,26 @@ def _next_item_id(rows: list[dict]) -> str:
 
 def render_ask_page(tenant_id: str, business_name: str) -> None:
     """Run a tenant-scoped chat with compact, bounded context between questions."""
+    # Morning Restock Assessment Briefing (Stitch Wireframe ai_copilot)
+    low_stock = procurement.get_low_stock(tenant_id=tenant_id)
+    low_count = low_stock.get("count", 0) if "error" not in low_stock else 0
+    low_items = low_stock.get("items", []) if "error" not in low_stock else []
+    if low_items:
+        highlight = ", ".join(f"{i['item_name']} ({i['current_stock']} left)" for i in low_items[:2])
+        st.markdown(
+            f'<div class="morning-briefing-card">'
+            f'<div style="display:flex; justify-content:space-between; align-items:center;">'
+            f'<span class="briefing-tag">{_icon_svg("sparkles", 16)} Morning Stock Briefing</span>'
+            f'<span class="briefing-alert">{low_count} low SKUs</span>'
+            f'</div>'
+            f'<h3 style="margin:0.4rem 0 0.2rem; font-size:1.15rem; color:#1c1b1b;">Today\'s Restock Assessment</h3>'
+            f'<p style="margin:0; font-size:0.92rem; color:#52605d; line-height:1.5;">'
+            f'<strong>Good morning, {html.escape(business_name)}.</strong> You have {low_count} items below reorder threshold. '
+            f'<span style="color:#b42318; font-weight:600;">{highlight}</span> are critically low.'
+            f'</p></div>',
+            unsafe_allow_html=True
+        )
+
     st.markdown('<div class="assistant-panel"><div class="assistant-brand">'
                 f'<div class="assistant-avatar">{_icon_svg("sparkles", 21)}</div>'
                 '<div><span class="tag-ai">AI COPILOT</span><h2>How can I help your shop?</h2>'
@@ -969,7 +1063,7 @@ def render_activity_page(tenant_id: str) -> None:
 
 def render_copilot_page(tenant_id: str, business_name: str) -> None:
     """Keep business questions and the shop's editable policies inside Dashboard."""
-    tabs = st.tabs(["💬 Ask Copilot", "📘 Policy Q&A", "📄 View & edit policies"])
+    tabs = st.tabs(["💬 Ask Copilot", "📘 Policy Q&A", "📄 View & edit policies", "🔒 Procurement Rules"])
     with tabs[0]:
         render_ask_page(tenant_id, business_name)
     with tabs[1]:
@@ -997,6 +1091,9 @@ def render_copilot_page(tenant_id: str, business_name: str) -> None:
                     st.error(f"Policy answer unavailable: {type(exc).__name__}: {exc}")
     with tabs[2]:
         render_policy_editor(tenant_id)
+    with tabs[3]:
+        # Shop-owner-set procurement rules enforced deterministically by restock_agent.py
+        render_shop_rules_editor(tenant_id)
 
 
 def render_policy_editor(tenant_id: str) -> None:
@@ -1040,6 +1137,288 @@ def render_policy_editor(tenant_id: str) -> None:
                     policy_index.get_index.cache_clear()
                     st.success("Business-specific policy added.")
                     st.rerun()
+
+
+
+# ---------------------------------------------------------------------------
+# CSV bulk import page — Operations → Import Data tab
+# ---------------------------------------------------------------------------
+# Lets the shop owner upload a properly formatted CSV to replace or extend
+# stock, supplier quotes, or purchase history in one go. This is much faster
+# than entering rows one at a time, and is needed for demo setup and onboarding.
+#
+# Each file type is validated against its required columns before writing.
+# A wrong file (e.g. uploading a sales CSV in the stock slot) is rejected
+# with a clear error message listing the expected column headers.
+#
+# Data flow: uploaded file → validate headers → merge with existing rows
+#            (or replace entirely) → _write_tenant_rows() → CSV on disk.
+
+# Expected columns for each CSV type (used for validation and as download templates)
+_CSV_SCHEMA: dict[str, list[str]] = {
+    "current_stock.csv": ["item_id", "item_name", "category", "current_stock",
+                          "reorder_point", "unit_cost_ugx"],
+    "supplier_quotes.csv": ["supplier_name", "item_id", "offered_unit_price_ugx",
+                            "min_order_qty", "lead_time_days"],
+    "past_purchases.csv": ["date", "item_id", "quantity_purchased",
+                           "historical_unit_price_ugx"],
+}
+
+
+def render_import_page(tenant_id: str) -> None:
+    """Bulk-import CSV data for stock, supplier quotes, or purchase history.
+
+    The user uploads a properly formatted CSV file and chooses whether to
+    merge (append new rows) or replace (overwrite) the existing records.
+    Download buttons provide correctly formatted template files so users
+    know exactly what columns are expected.
+    """
+    _page_header("inventory", "Import Data", "Upload a CSV to add or replace this shop's records in bulk.", "BULK IMPORT")
+    st.markdown(
+        "> **Tip:** Download a template below, fill it in, then upload it here. "
+        "Use **Merge** to keep existing rows and add new ones, or **Replace** to overwrite."
+    )
+
+    # ---- Download template buttons so the user always has the correct format ----
+    st.markdown("#### Download templates (correct column format)")
+    template_cols = st.columns(3)
+
+    for col_index, (filename, columns) in enumerate(_CSV_SCHEMA.items()):
+        # Build a minimal one-row example CSV in memory
+        example_row = {
+            "item_id": "ITM001", "item_name": "Example Product", "category": "Stationery",
+            "current_stock": "10", "reorder_point": "5", "unit_cost_ugx": "500",
+            "supplier_name": "Example Supplier", "offered_unit_price_ugx": "550",
+            "min_order_qty": "10", "lead_time_days": "3",
+            "date": "2026-01-01", "quantity_purchased": "20",
+            "historical_unit_price_ugx": "480",
+        }
+        buf = io.StringIO(newline="")
+        writer = csv.DictWriter(buf, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerow(example_row)
+        label = filename.replace(".csv", "").replace("_", " ").title()
+        template_cols[col_index].download_button(
+            f"📥 {label} template",
+            buf.getvalue(),
+            file_name=f"template_{filename}",
+            mime="text/csv",
+            key=f"template_{tenant_id}_{filename}",
+            width="stretch",
+        )
+
+    st.markdown("---")
+
+    # ---- Upload section ----
+    st.markdown("#### Upload your completed file")
+    file_type = st.selectbox(
+        "Which records does this file contain?",
+        list(_CSV_SCHEMA.keys()),
+        format_func=lambda f: f.replace(".csv", "").replace("_", " ").title(),
+        key=f"import_file_type_{tenant_id}",
+    )
+    mode = st.radio(
+        "Import mode",
+        ["Merge (add new rows, keep existing)", "Replace (overwrite all existing rows)"],
+        key=f"import_mode_{tenant_id}",
+        horizontal=True,
+    )
+    uploaded = st.file_uploader(
+        "CSV file",
+        type=["csv"],
+        key=f"import_uploader_{tenant_id}",
+        help="Must match the template column format shown above.",
+    )
+
+    if uploaded is not None:
+        try:
+            # --- Parse and validate the uploaded CSV ---
+            content = uploaded.read().decode("utf-8-sig")
+            reader = csv.DictReader(io.StringIO(content))
+            uploaded_rows = list(reader)
+            uploaded_headers = list(reader.fieldnames or [])
+
+            expected = _CSV_SCHEMA[file_type]
+            missing_cols = [c for c in expected if c not in uploaded_headers]
+
+            if missing_cols:
+                # Show a clear error with exactly what columns are missing
+                st.error(
+                    f"This file is missing required columns: **{', '.join(missing_cols)}**\n\n"
+                    f"Expected columns: `{', '.join(expected)}`\n\n"
+                    f"Found columns: `{', '.join(uploaded_headers)}`\n\n"
+                    "Download the template above to see the correct format."
+                )
+            elif not uploaded_rows:
+                st.warning("The uploaded file has no data rows (only a header). Nothing was imported.")
+            else:
+                # --- Preview the data before committing ---
+                st.markdown(f"#### Preview — {len(uploaded_rows)} row(s) found")
+                st.dataframe(
+                    uploaded_rows[:10],  # show first 10 rows as a sanity check
+                    hide_index=True,
+                )
+                if len(uploaded_rows) > 10:
+                    st.caption(f"Showing 10 of {len(uploaded_rows)} rows.")
+
+                if st.button(
+                    f"✅ Import {len(uploaded_rows)} row(s) into {file_type.replace('_', ' ')}",
+                    type="primary",
+                    key=f"confirm_import_{tenant_id}",
+                ):
+                    if "Replace" in mode:
+                        # Overwrite: use ONLY the uploaded rows
+                        final_rows = uploaded_rows
+                        action_word = "replaced"
+                    else:
+                        # Merge: append uploaded rows to existing records
+                        existing_headers, existing_rows = _read_tenant_rows(tenant_id, file_type)
+                        final_rows = existing_rows + uploaded_rows
+                        action_word = "merged"
+
+                    _write_tenant_rows(tenant_id, file_type, expected, final_rows)
+                    st.success(
+                        f"✅ {len(uploaded_rows)} row(s) {action_word} into this business's "
+                        f"{file_type.replace('_', ' ').replace('.csv', '')} records."
+                    )
+                    st.rerun()
+
+        except Exception as exc:
+            st.error(f"Could not read the uploaded file: {type(exc).__name__}: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Per-shop procurement rules editor — shown inside Dashboard → Copilot tab
+# ---------------------------------------------------------------------------
+# Shop owners can set rules like "always use John Supplies for pens" or
+# "never buy from Cheap Mart". These are saved to shop_rules.json and
+# enforced deterministically by restock_agent.py AFTER the AI plans.
+# The AI reasons freely; Python applies the rules. This separation means:
+#   - The AI can still compare prices and give rationales
+#   - Hard business rules are never overridden by the model
+#
+# Data flow: UI form → JSON → data/tenants/<id>/shop_rules.json → restock_agent.py
+def render_shop_rules_editor(tenant_id: str) -> None:
+    """Let the shop owner set and save deterministic procurement rules.
+
+    Rules are enforced by Python in restock_agent.py, not by the AI model.
+    The AI reasons about prices and quantities; these rules override specific
+    supplier or category choices after the AI has made its recommendation.
+    """
+    import json as _json
+
+    rules_path = (
+        Path("data") / "tenants" / tenant_id / "shop_rules.json"
+    )
+
+    # Load existing rules or start with empty defaults
+    current_rules: dict = {}
+    if rules_path.exists():
+        try:
+            current_rules = _json.loads(rules_path.read_text(encoding="utf-8"))
+        except Exception:
+            current_rules = {}
+
+    st.markdown("#### 🔒 Procurement rules for this shop")
+    st.caption(
+        "These rules are enforced by Python code — the AI cannot override them. "
+        "They apply to every restock plan generated for this business."
+    )
+
+    # ---- Preferred suppliers ----
+    st.markdown("**Preferred suppliers** (item keyword → supplier name)")
+    st.caption(
+        "Example: keyword `pens`, supplier `John Supplies` means the AI's "
+        "plan will always use John Supplies for any item whose name contains 'pens'."
+    )
+    preferred: dict = current_rules.get("preferred_suppliers", {})
+    # Show existing preferred rules with delete buttons
+    for key in list(preferred.keys()):
+        row = st.columns([3, 3, 1])
+        row[0].caption(f"Keyword: **{key}**")
+        row[1].caption(f"Supplier: **{preferred[key]}**")
+        if row[2].button("✕", key=f"del_pref_{tenant_id}_{key}", help="Remove this rule"):
+            del preferred[key]
+            current_rules["preferred_suppliers"] = preferred
+            rules_path.write_text(_json.dumps(current_rules, indent=2), encoding="utf-8")
+            st.rerun()
+
+    with st.form(f"add_preferred_rule_{tenant_id}"):
+        pref_cols = st.columns([3, 3, 1])
+        new_keyword = pref_cols[0].text_input(
+            "Item keyword", placeholder="e.g. pens",
+            key=f"pref_keyword_{tenant_id}"
+        )
+        new_supplier = pref_cols[1].text_input(
+            "Preferred supplier", placeholder="e.g. John Supplies",
+            key=f"pref_supplier_{tenant_id}"
+        )
+        add_pref = pref_cols[2].form_submit_button("Add", type="primary")
+    if add_pref:
+        if new_keyword.strip() and new_supplier.strip():
+            preferred[new_keyword.strip().lower()] = new_supplier.strip()
+            current_rules["preferred_suppliers"] = preferred
+            rules_path.write_text(_json.dumps(current_rules, indent=2), encoding="utf-8")
+            st.success(f"Rule saved: always use {new_supplier.strip()} for items matching '{new_keyword.strip()}'.")
+            st.rerun()
+        else:
+            st.error("Both keyword and supplier name are required.")
+
+    st.markdown("---")
+
+    # ---- Blacklisted suppliers ----
+    st.markdown("**Blacklisted suppliers** (never use these)")
+    blacklisted: list = current_rules.get("blacklisted_suppliers", [])
+    if blacklisted:
+        for i, name in enumerate(blacklisted):
+            bcols = st.columns([5, 1])
+            bcols[0].caption(f"❌ {name}")
+            if bcols[1].button("Remove", key=f"del_black_{tenant_id}_{i}"):
+                blacklisted.pop(i)
+                current_rules["blacklisted_suppliers"] = blacklisted
+                rules_path.write_text(_json.dumps(current_rules, indent=2), encoding="utf-8")
+                st.rerun()
+
+    with st.form(f"add_blacklist_{tenant_id}"):
+        new_black = st.text_input(
+            "Supplier to blacklist", placeholder="e.g. Cheap Mart",
+            key=f"blacklist_input_{tenant_id}"
+        )
+        add_black = st.form_submit_button("Blacklist supplier")
+    if add_black:
+        if new_black.strip() and new_black.strip() not in blacklisted:
+            blacklisted.append(new_black.strip())
+            current_rules["blacklisted_suppliers"] = blacklisted
+            rules_path.write_text(_json.dumps(current_rules, indent=2), encoding="utf-8")
+            st.success(f"'{new_black.strip()}' blacklisted for this shop.")
+            st.rerun()
+        elif new_black.strip() in blacklisted:
+            st.warning("That supplier is already blacklisted.")
+
+    st.markdown("---")
+
+    # ---- Max single order budget ----
+    st.markdown("**Maximum restock budget (UGX)**")
+    st.caption("The AI will not plan a restock above this amount for this shop.")
+    current_max = current_rules.get("max_order_ugx", 500000)
+    with st.form(f"max_budget_rule_{tenant_id}"):
+        new_max = st.number_input(
+            "Maximum order budget (UGX)",
+            min_value=50000, max_value=10000000,
+            value=int(current_max), step=50000,
+            key=f"max_budget_input_{tenant_id}",
+        )
+        save_max = st.form_submit_button("Save budget limit", type="primary")
+    if save_max:
+        current_rules["max_order_ugx"] = int(new_max)
+        rules_path.write_text(_json.dumps(current_rules, indent=2), encoding="utf-8")
+        st.success(f"Max budget set to UGX {int(new_max):,} for this shop.")
+        st.rerun()
+
+    # Show current raw JSON for transparency (collapsible)
+    if current_rules:
+        with st.expander("Current rules (raw JSON)"):
+            st.json(current_rules)
 
 
 def render_approvals_page(tenant_id: str, business_name: str) -> None:

@@ -10,10 +10,10 @@
 | Member | Reg No | Role |
 |:---|:---|:---|
 | Mwesigwa Arnold Mugahi (GitHub: AJmight) | 23/U/24738/PS | AI Engineering Lead (principal author of this report) |
-| Boonabaana Bronia (GitHub: broniaB2) | [reg no] | [role] |
-| [name] | [reg no] | [role] |
-| [name] | [reg no] | [role] |
-| [name] | [reg no] | [role] |
+| Boonabaana Bronia (GitHub: broniaB2) | 23/U/07647/EVE | App Integration / Storage & UI Lead |
+| Nakyambadde Mariam | 23/U/13953/EVE | Requirements & Documentation Lead |
+| Naisanga Patricia | 23/U/13204/EVE | Quality & Security Lead |
+| Tulinawe Ismail | 23/U/18058/EVE | DevOps & Deployment Lead |
 
 Individual contributions are listed after the References.
 
@@ -673,9 +673,9 @@ the weekly reports in `docs/weekly-reports/`. Project tracking was kept on Click
 |:---|:---|:---|
 | Mwesigwa Arnold Mugahi | Model integration and fallback chain; prompts v1.0–v2.5; the eight tools and registry; bounded and restock agents; RAG pipeline and corpus; state machine, justified memory and MCP server; guardrails; Week 7 evaluation and Week 8 hardening; principal author of this report | Commits on `main`, tags `week2-complete` … `v1.0.0` |
 | Boonabaana Bronia | Week 6 scoped SQLite storage (`src/storage.py`), trusted shop/user context in the registry, tenant-scoped RAG, `tests/test_week6_storage.py`; post-release review, the F-26 fix and failure write-up; the Streamlit web UI; this report update and the slide deck | Commit `741a29e`, PR #1, PR #3, branch `ui-streamlit` |
-| [name] | [what they did] | [commit / PR / document link] |
-| [name] | [what they did] | [commit / PR / document link] |
-| [name] | [what they did] | [commit / PR / document link] |
+| Nakyambadde Mariam | Requirements engineering; 12 User Stories and Acceptance Criteria (`docs/requirements/user-stories.md`); AI Boundary Matrix; Single Trusted User Model (`Decision-001`); Restock Agent Task Contract; comprehensive documentation and project handoff materials | `docs/requirements/`, `docs/ONBOARDING.md`, `docs/PROJECT_HANDOFF.md` |
+| Naisanga Patricia | Quality assurance and security; four deterministic guardrail layers (`src/guardrails.py`); 31-scenario adversarial evaluation suite (`tests/test_week7_evaluations.py`); tool contract verification; maintenance and verification of the 26-defect Failure Catalogue | `src/guardrails.py`, `tests/test_week7_evaluations.py`, `docs/evaluation/failure-catalogue.md` |
+| Tulinawe Ismail | DevOps, infrastructure, and deployment; environment reproducibility and virtual environment specs; zero-leakage secrets management; JSONL observability pipelines (`evidence/traces/`); automated report and slide export scripts; release test harness verification | `requirements.txt`, `scripts/build_slides.py`, `tests/test_week8_release_checks.py`, git tags |
 
 
 ## Appendices
