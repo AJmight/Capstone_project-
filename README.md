@@ -27,7 +27,7 @@ Quick start after setup: `py src\app.py`
 | 2 | Model integration and prompting | Done — prompt v1.2.0, 10-case evaluation 9/10 (`docs/evaluation/week2-prompt-evaluation.md`) |
 | 3 | Context / RAG | Done — 12-document corpus, BM25 retrieval, cited answers 15/15, `search_policy` tool (`docs/evaluation/week3-rag-evaluation.md`) |
 | 4 | Tools and function calling | Done — 4 deterministic tools, registry, human approval gate; offline 22/22, live 6/6 (`docs/evaluation/week4-tool-evaluation.md`) |
-| 5 | Bounded agent | Done — Weekly Restock Agent with task contract, explicit state, pre/post-conditions; 4 live traces incl. failure/recovery; offline 17/17 (`docs/evaluation/week5-agent-evaluation.md`) |
+| 5 | Bounded agent | Done — Weekly Restock Agent with task contract, explicit state, pre/post-conditions; 4 live traces incl. failure/recovery; offline regression 20/20 (`docs/evaluation/week5-agent-evaluation.md`) |
 | 6 | Memory, state, interoperability | Done — SQLite FSM (`src/state.py`), persistent memory with shop isolation (`src/memory.py`), MCP server (`src/mcp_interface.py`), 9/9 tests passed (`tests/test_week6_state_memory.py`) |
 | 7 | 30+ scenario evaluation, guardrails | Done — Deterministic guardrails (`src/guardrails.py`, F-12 fix), 31-scenario evaluation dataset (`tests/test_week7_evaluations.py`, 31/31 passed), Failure Catalogue F-01..F-25 |
 | 8 | Release, final report, presentation | Done — hardening pass fixed F-23/F-24/F-25, guardrails wired into the running app, 19 release checks (`tests/test_week8_release_checks.py`), final report `docs/final-report.md`, evidence pack `evidence/final/`, tag `v1.0.0`. **Still open: the slide deck, the demo screenshots and the MUELE upload (hand-in 23 Oct)** |
@@ -62,7 +62,7 @@ py tests\test_week4_tools.py --live            # 6 live agent tests
 # Week 5: bounded weekly restock agent
 py src\restock_agent.py --budget 300000 --user "Your Name"        # prints the Sense->...->Stop timeline
 py src\restock_agent.py --budget 300000 --save-trace my_run       # writes evidence\week5\trace_my_run.md
-py tests\test_week5_agent.py --offline        # 16 agent tests with a scripted fake model (no quota)
+py tests\test_week5_agent.py --offline        # 20 offline agent checks with a scripted fake model (no quota)
 py tests\test_week5_agent.py --live           # the 4 execution traces
 # Week 3: RAG over the policy documents
 py src\rag\policy_qa.py "Who can approve a requisition of UGX 800,000?"
@@ -110,6 +110,9 @@ supplier quotes and activity; Restock AI asks the bounded agent to plan; Approva
 human decision through direct Approve/Reject buttons. Python supplies the full evidence and checks
 the AI's priorities, quoted suppliers, figures and hard budget before saving a draft. If the AI is
 unavailable, no non-AI draft is silently created. Policy Q&A and editing are inside the Copilot.
+Saved drafts remain visible in approval history after a decision. A restock request can include an
+optional planning preference; it may guide AI priority and trade-off reasoning, while Python still
+sets quantities and verifies the budget.
 Copilot context is tenant-local, keeps four recent turns, and compacts older turns without an
 extra model call. Assistant replies can expand to show checked tool results and record evidence.
 Gemini receives every new request first; when configured, retryable Gemini failures pass the same

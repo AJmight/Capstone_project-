@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -31,18 +32,20 @@ def test_chat_session_hands_compacted_history_to_groq():
             json=lambda: {"choices": [{"message": {"content": "Here is the answer."}}]},
         )
 
-    with (patch.object(llm_client, "GROQ_API_KEY", "test-only-key"),
-          patch.object(llm_client, "MODELS", ["gemini-test", "groq:llama-test"]),
-          patch.object(llm_client, "MAX_MODEL_ATTEMPTS", 2),
-          patch.object(llm_client, "client",
-                       SimpleNamespace(chats=SimpleNamespace(create=create_gemini_chat))),
-          patch.object(llm_client.httpx, "post", fake_groq_post)):
-        session = llm_client.ChatSession("Stay within the shop records.", label="test-groq")
-        session.history = [
-            types.Content(role="user", parts=[types.Part(text="Earlier question")]),
-            types.Content(role="model", parts=[types.Part(text="Earlier answer")]),
-        ]
-        result = session.send("Current question")
+    with tempfile.TemporaryDirectory() as trace_dir:
+        with (patch.object(llm_client, "GROQ_API_KEY", "test-only-key"),
+              patch.object(llm_client, "MODELS", ["gemini-test", "groq:llama-test"]),
+              patch.object(llm_client, "MAX_MODEL_ATTEMPTS", 2),
+              patch.object(llm_client, "TRACE_PATH", Path(trace_dir) / "calls.jsonl"),
+              patch.object(llm_client, "client",
+                           SimpleNamespace(chats=SimpleNamespace(create=create_gemini_chat))),
+              patch.object(llm_client.httpx, "post", fake_groq_post)):
+            session = llm_client.ChatSession("Stay within the shop records.", label="test-groq")
+            session.history = [
+                types.Content(role="user", parts=[types.Part(text="Earlier question")]),
+                types.Content(role="model", parts=[types.Part(text="Earlier answer")]),
+            ]
+            result = session.send("Current question")
 
     assert gemini_attempts == ["gemini-test"]
     assert result.model == "groq:llama-test"

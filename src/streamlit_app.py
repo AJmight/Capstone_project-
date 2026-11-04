@@ -631,7 +631,8 @@ def render_ask_page(tenant_id: str, business_name: str) -> None:
                     if _is_restock_question(question.strip()):
                         budget = _extract_restock_budget(question.strip()) or 300000
                         result = run_restock(int(budget), user_name=business_name,
-                                             shop_id=tenant_id, tenant_id=tenant_id)
+                                             shop_id=tenant_id, tenant_id=tenant_id,
+                                             request_context=question.strip())
                         status.update(label="Restock review complete", state="complete", expanded=False)
                     else:
                         contextual_question = _copilot_context(summary, history, question.strip())
@@ -708,6 +709,8 @@ _RESTOCK_PATTERNS = (
     "restock", "reorder", "re-order", "re order", "plan a restock",
     "plan restock", "buy", "order", "procure", "procurement", "stock up",
     "what should we buy", "what should we order", "weekly restock",
+    "revise the draft", "rework the draft", "change the draft", "new draft",
+    "replan", "re-plan",
 )
 
 
@@ -819,6 +822,11 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
     with st.form(f"restock_business_{tenant_id}"):
         budget = st.number_input("Procurement cash budget (UGX)", min_value=1,
                                  step=10000, value=300000, key=f"restock_budget_{tenant_id}")
+        request_context = st.text_area(
+            "Planning preference (optional)",
+            key=f"restock_preference_{tenant_id}",
+            placeholder="e.g. Prioritize calculators over pencils if the stock evidence supports it.",
+        )
         st.caption("The AI chooses priorities and supplier trade-offs from your records. Python checks every figure and the budget; you approve or reject the saved draft.")
         submitted = st.form_submit_button("Ask AI to plan restock", type="primary", width="stretch")
     if not submitted:
@@ -830,7 +838,8 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
     try:
         with st.status("AI is reviewing stock, purchase history and supplier quotes…", expanded=True) as status:
             result = run_restock(int(budget), user_name=business_name,
-                                 shop_id=tenant_id, tenant_id=tenant_id)
+                                 shop_id=tenant_id, tenant_id=tenant_id,
+                                 request_context=request_context.strip())
             status.update(label="AI restock review complete", state="complete", expanded=False)
         state = result.get("state", {})
         plan = state.get("plan")
@@ -1441,13 +1450,17 @@ def render_approvals_page(tenant_id: str, business_name: str) -> None:
             st.markdown("**Records checked:** " + ", ".join(handoff.get("sources", [])))
     drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     waiting = [draft for draft in drafts if draft["status"] == procurement.DRAFT_STATUS]
+    if drafts:
+        st.markdown("#### Saved draft history")
+        st.caption("Drafts remain listed here after approval or rejection, with the recorded decision status.")
+        st.dataframe(pd.DataFrame([{
+            "Draft ID": draft["draft_id"],
+            "Status": draft["status"],
+            "Created": draft["created_at"],
+            "Estimated (UGX)": draft["estimated_budget_ugx"],
+        } for draft in drafts]), width="stretch", hide_index=True)
     if not waiting:
         st.info("No reorder drafts are waiting for review.")
-        if drafts:
-            st.markdown("#### Recorded reorder history")
-            st.dataframe(pd.DataFrame([{"Draft ID": d["draft_id"], "Status": d["status"],
-                                        "Created": d["created_at"], "Estimated (UGX)": d["estimated_budget_ugx"]}
-                                       for d in drafts]), width="stretch", hide_index=True)
         return
     selected = st.selectbox("Draft", waiting, format_func=lambda d: d["draft_id"])
     draft = approvals.load_draft(selected["draft_id"], tenant_id, "default-user")

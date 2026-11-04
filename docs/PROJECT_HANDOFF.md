@@ -173,6 +173,18 @@ Changes made in the release pass (all with re-tests):
 - Thoroughness takes precedence over latency: no evidence collection, validation, human approval, or
   AI-outage safety boundary is removed to make the flow appear faster. No latency benchmark is claimed.
 
+## 6i. Draft history and owner preferences — 2026-11-04
+
+- Approval now shows every saved draft and its current status, including when another draft is still
+  awaiting a decision. Approval and rejection update the saved draft; they do not remove it.
+- The Restock form accepts an optional planning preference, and restock requests from Copilot pass
+  the user's current wording to the bounded agent. The model may use it for priorities and trade-offs;
+  quantities, prices, totals and budget validation remain Python-controlled.
+- Offline coverage now creates multiple drafts, tests a calculator-over-pencil preference against
+  synthetic low-stock evidence, and verifies approve/reject status visibility. Week 5 offline tests
+  pass 20/20; Streamlit UI checks pass 19/19. Preference adaptation is validated with a scripted
+  model; no live Gemini result is claimed.
+
 ## 7. Known issues
 
 - F-04 closed in Week 4. F-10: the 200 % cap can only trigger through a large supplier MOQ (documented in the final report).

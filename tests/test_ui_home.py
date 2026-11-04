@@ -49,7 +49,9 @@ import memory as memory_module
 import state as state_module
 import tool_agent
 import restock_agent as restock_agent_mod
-from test_week5_agent import fake_model, ideal_policy
+import llm_client
+from test_week5_agent import (STATUS_LINE, _draft_args, _fc, _last_tool_result,
+                              _plan_args, _sense, _text, fake_model, ideal_policy)
 import tenant_context                          # to sandbox business folders
 from conversation_context import (COPILOT_RECENT_TURNS, COPILOT_SUMMARY_LIMIT,
                                   build_copilot_context, compact_copilot_turn)
@@ -123,9 +125,45 @@ def seed_one_low_item(tenant_id: str) -> None:
                  "offered_unit_price_ugx": 900, "min_order_qty": 1, "lead_time_days": 2}])
 
 
+def seed_calculator_pencil_inventory(tenant_id: str) -> None:
+    """Make both preference-test items low and give them complete quote/history evidence."""
+    folder = tenant_context.tenant_data_dir(tenant_id)
+    items = [
+        {"item_id": "ITM015", "item_name": "Calculator (Basic)", "category": "Electronics",
+         "current_stock": 1, "reorder_point": 5, "unit_cost_ugx": 15000},
+        {"item_id": "ITM004", "item_name": "Pencils HB", "category": "Stationery",
+         "current_stock": 1, "reorder_point": 5, "unit_cost_ugx": 300},
+    ]
+    write_rows(folder / "current_stock.csv",
+               ["item_id", "item_name", "category", "current_stock", "reorder_point", "unit_cost_ugx"],
+               items)
+    write_rows(folder / "past_purchases.csv",
+               ["date", "item_id", "quantity_purchased", "historical_unit_price_ugx",
+                "supplier_name", "payment_status"],
+               [{"date": "2026-10-01", "item_id": item["item_id"], "quantity_purchased": 2,
+                 "historical_unit_price_ugx": item["unit_cost_ugx"],
+                 "supplier_name": "Stationery Supply Co", "payment_status": "Paid"}
+                for item in items])
+    write_rows(folder / "supplier_quotes.csv",
+               ["supplier_name", "item_id", "offered_unit_price_ugx", "min_order_qty",
+                "lead_time_days"],
+               [{"supplier_name": "Stationery Supply Co", "item_id": item["item_id"],
+                 "offered_unit_price_ugx": item["unit_cost_ugx"], "min_order_qty": 1,
+                 "lead_time_days": 2} for item in items])
+
+
 def page_text(at: AppTest) -> str:
     """All the HTML/markdown on the page as one string, for simple 'is it shown' checks."""
     return " ".join(m.value for m in at.markdown)
+
+
+def displayed_draft_statuses(at: AppTest) -> set[str]:
+    """Read the status values from the draft-history table visible in the UI."""
+    for table in at.dataframe:
+        value = table.value
+        if hasattr(value, "columns") and {"Draft ID", "Status"}.issubset(value.columns):
+            return set(value["Status"])
+    raise AssertionError("The saved-draft history table is not displayed.")
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +368,6 @@ def test_ui12_restocks_create_a_session_and_open_approvals_automatically():
     assert len(pending) == 2 and len({d["draft_id"] for d in pending}) == 2
 
 
-@fake_restock_ai
 def test_ui13_approval_buttons_and_decision_are_session_safe():
     """The Approvals screen shows one draft with the AI's reasoning and two big
     buttons (Approve / Deny) plus a comments box; a reason is required to deny."""
@@ -339,7 +376,8 @@ def test_ui13_approval_buttons_and_decision_are_session_safe():
     seed_one_low_item(tenant_id)
     go_to_page(at, "Restock AI")
     at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
-    next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
+    with fake_model(ideal_policy):
+        next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     draft_summary = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")[0]
     draft = approvals.load_draft(draft_summary["draft_id"], tenant_id, "default-user")
 
@@ -356,10 +394,12 @@ def test_ui13_approval_buttons_and_decision_are_session_safe():
     assert decided["status"] == "APPROVED"
     assert decided["decision"]["decided_by"] == "UI Approval Flow"
     assert at.session_state["workspace_page"] == "Approvals"
+    assert "Saved draft history" in page_text(at)
 
     # A second draft can be denied only after a human enters a reason.
     go_to_page(at, "Restock AI")
-    next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
+    with fake_model(ideal_policy):
+        next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     second = next(d for d in approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
                   if d["status"] == procurement.DRAFT_STATUS)
     at.text_area(key=f"approval_reason_{tenant_id}").set_value("")
@@ -372,6 +412,78 @@ def test_ui13_approval_buttons_and_decision_are_session_safe():
     rejected = approvals.load_draft(second["draft_id"], tenant_id, "default-user")
     assert rejected["status"] == "REJECTED"
     assert rejected["decision"]["reason"] == "Supplier delivery is too late"
+    assert displayed_draft_statuses(at) == {"APPROVED", "REJECTED"}
+
+
+def test_ui18_preference_replans_and_keeps_multiple_drafts_reviewable():
+    """A stated calculator preference reaches the agent and both human decisions remain visible."""
+    at = fresh_app()
+    tenant_id = open_business(at, "UI Preference Restock Shop")
+    seed_calculator_pencil_inventory(tenant_id)
+    go_to_page(at, "Restock AI")
+    at.number_input(key=f"restock_budget_{tenant_id}").set_value(100000)
+    with fake_model(ideal_policy):
+        next(button for button in at.form_submit_button
+             if button.label == "Ask AI to plan restock").click().run()
+    first = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")[0]
+    assert first["status"] == procurement.DRAFT_STATUS
+    assert "Saved draft history" in page_text(at)
+    assert displayed_draft_statuses(at) == {procurement.DRAFT_STATUS}
+
+    def calculator_preference_policy(contents):
+        """Script the model to prioritize calculators when the owner states that preference."""
+        message = contents[0].parts[0].text
+        name, result = _last_tool_result(contents)
+        ids, budget, evidence = _sense(contents)
+        arguments = _plan_args(ids, budget, evidence)
+        if "[OWNER REQUEST]" in message:
+            assert "I personally want more calculators than pencils" in message
+            arguments["priority_order"] = ["ITM015", "ITM004"]
+            arguments["priority_rationale"] = (
+                "The owner prefers calculators over pencils, so the calculator is prioritized; "
+                "both items remain subject to stock evidence and the available budget.")
+        if name is None:
+            return _fc(("plan_within_budget", arguments))
+        if name == "plan_within_budget":
+            rationale = arguments.get("priority_rationale", "")
+            return _fc(("draft_requisition", _draft_args(result["included"], rationale)))
+        return _text(
+            "I recommend prioritizing the calculator because you stated that preference; "
+            "the pencil remains in the plan where stock evidence and budget allow. "
+            f"Draft {result.get('draft_id')} created.\n{STATUS_LINE}"
+        )
+
+    go_to_page(at, "Dashboard")
+    preference_request = (
+        "Please revise the draft: I personally want more calculators than pencils. "
+        "Explain your recommendation and make a new draft."
+    )
+    with fake_model(calculator_preference_policy):
+        at.chat_input[0].set_value(preference_request)
+        at.run()
+    assert not at.exception, at.exception
+
+    drafts = approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
+    assert len(drafts) == 2
+    revised = next(draft for draft in drafts if draft["draft_id"] != first["draft_id"])
+    revised_draft = approvals.load_draft(revised["draft_id"], tenant_id, "default-user")
+    assert revised_draft["status"] == procurement.DRAFT_STATUS
+    assert revised_draft["lines"][0]["item_id"] == "ITM015"
+    assert "owner prefers calculators over pencils" in revised_draft["ai_selection_rationale"].lower()
+    answer = at.session_state[f"copilot_history_{tenant_id}"][-1]["answer"].lower()
+    assert "recommend prioritizing the calculator" in answer
+    assert at.session_state["workspace_page"] == "Approvals"
+    assert displayed_draft_statuses(at) == {procurement.DRAFT_STATUS}
+
+    at.text_area(key=f"approval_reason_{tenant_id}").input("Approved with the stated preference")
+    next(button for button in at.form_submit_button if button.label == "Approve draft").click().run()
+    assert approvals.load_draft(revised["draft_id"], tenant_id, "default-user")["status"] == "APPROVED"
+    assert displayed_draft_statuses(at) == {"APPROVED", procurement.DRAFT_STATUS}
+
+    at.text_area(key=f"approval_reason_{tenant_id}").input("Keep the original plan for comparison")
+    next(button for button in at.form_submit_button if button.label == "Reject draft").click().run()
+    assert approvals.load_draft(first["draft_id"], tenant_id, "default-user")["status"] == "REJECTED"
+    assert displayed_draft_statuses(at) == {"APPROVED", "REJECTED"}
 
 
 def test_ui17_model_outage_does_not_save_non_ai_draft():
@@ -478,9 +590,10 @@ def test_ui_copilot_explains_unconfigured_groq_backup():
     """If the provider chain fails without Groq configured, show the setup step."""
     at = fresh_app()
     open_business(at, "UI Missing Groq Config")
-    with patch.object(tool_agent, "run_agent", return_value={
+    with (patch.object(tool_agent, "run_agent", return_value={
             "final_text": "The AI service is unavailable right now.",
-            "stopped_reason": "model_unavailable", "tool_calls": []}):
+            "stopped_reason": "model_unavailable", "tool_calls": []}),
+          patch.object(llm_client, "groq_fallback_configured", return_value=False)):
         at.chat_input[0].set_value("What is low in stock?")
         at.run()
     assert not at.exception, at.exception

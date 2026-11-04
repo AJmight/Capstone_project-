@@ -257,7 +257,8 @@ def _handoffs(state: AgentState) -> list[str]:
 # ---------------------------------------------------------------------------
 def run_restock(budget_ugx: int, user_name: str = "shop user",
                 save_trace_as: str | None = None, shop_id: str = "default_shop",
-                tenant_id: str = "default-shop", user_id: str = DEFAULT_USER_ID) -> dict:
+                tenant_id: str = "default-shop", user_id: str = DEFAULT_USER_ID,
+                request_context: str = "") -> dict:
     """Run the weekly restock task once. Returns the full run record (also logged)."""
     state = AgentState(goal=GOAL, budget_ugx=budget_ugx, user_name=user_name)
     run, final_text = None, ""
@@ -376,6 +377,14 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         message = (f"[RESTOCK TASK]\nGoal: {GOAL}\nBudget: UGX {budget_ugx:,} (budget_ugx={budget_ugx})\n"
                    f"Requested by: {user_name}\n\n[SENSE]\n" +
                    json.dumps(state.restock_options, indent=1))
+        if request_context.strip():
+            message += (
+                "\n\n[OWNER REQUEST]\n"
+                "Consider this preference when choosing priorities and trade-offs among "
+                "evidence-supported low-stock items. Python still calculates quantities, prices, "
+                "totals, and budget fit; do not override those checks.\n"
+                f"{request_context.strip()}"
+            )
         if mem_prompt:
             message += f"\n\n{mem_prompt}"
         # Tell the AI it has the full set of 8 tools and describe the expected analysis order.

@@ -198,10 +198,10 @@ def looping_policy(contents):
 
 
 def off_contract_policy(contents):
-    """Tries a tool that exists but is not in this task's contract, then gives up."""
+    """Tries to approve a requisition, which is outside the agent's tool contract."""
     name, _ = _last_tool_result(contents)
     if name is None:
-        return _fc(("compare_supplier_quotes", {"item": "ITM001"}))
+        return _fc(("approve_requisition", {"draft_id": "REQ-TEST"}))
     return _text("I could not complete the task.")
 
 
@@ -214,8 +214,10 @@ def forgetful_policy(contents):
 @contextmanager
 def fake_model(policy=None, unavailable=False):
     """Swap Gemini for the scripted policy; also send agent traces to a temp folder."""
-    saved = (tool_agent.client, tool_agent.TRACE_PATH, llm_client.TRACE_PATH, llm_client.time.sleep,
-             restock_agent.OUT_DIR, restock_agent.RUNS_LOG)
+    saved = (tool_agent.client, tool_agent.MODELS, llm_client.MODELS,
+             llm_client.MAX_MODEL_ATTEMPTS, tool_agent.TRACE_PATH, llm_client.TRACE_PATH,
+             registry.TRACE_PATH, llm_client.time.sleep, restock_agent.OUT_DIR,
+             restock_agent.RUNS_LOG)
     tmp = Path(tempfile.mkdtemp())
 
     def generate_content(model, contents, config):
@@ -225,14 +227,20 @@ def fake_model(policy=None, unavailable=False):
 
     try:
         tool_agent.client = SimpleNamespace(models=SimpleNamespace(generate_content=generate_content))
+        tool_agent.MODELS = [llm_client.PRIMARY_MODEL]
+        llm_client.MODELS = [llm_client.PRIMARY_MODEL]
+        llm_client.MAX_MODEL_ATTEMPTS = 1
         tool_agent.TRACE_PATH = tmp / "agent.jsonl"
         llm_client.TRACE_PATH = tmp / "llm.jsonl"
+        registry.TRACE_PATH = tmp / "tools.jsonl"
         llm_client.time.sleep = lambda s: None                    # do not wait between rounds
         restock_agent.OUT_DIR, restock_agent.RUNS_LOG = tmp, tmp / "runs.jsonl"
         yield
     finally:
-        (tool_agent.client, tool_agent.TRACE_PATH, llm_client.TRACE_PATH, llm_client.time.sleep,
-         restock_agent.OUT_DIR, restock_agent.RUNS_LOG) = saved
+        (tool_agent.client, tool_agent.MODELS, llm_client.MODELS,
+         llm_client.MAX_MODEL_ATTEMPTS, tool_agent.TRACE_PATH, llm_client.TRACE_PATH,
+         registry.TRACE_PATH, llm_client.time.sleep, restock_agent.OUT_DIR,
+         restock_agent.RUNS_LOG) = saved
         registry.clear_faults()
 
 
@@ -340,7 +348,7 @@ def test_offline_08_looping_model_bounded():
 
 
 def test_offline_09_off_contract_tool_blocked():
-    """compare_supplier_quotes is a real tool but not in this task's contract -> blocked."""
+    """Approval is not an agent capability and is blocked before registry execution."""
     with sandbox(), fake_model(off_contract_policy):
         rec = restock_agent.run_restock(300000)
         err = rec["loop"]["tool_calls"][0]["result"]["error"]
