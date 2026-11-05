@@ -156,6 +156,12 @@ CSS = """
   [data-testid="stMetricValue"] { color:var(--teal-dark); font:700 1.55rem 'JetBrains Mono',monospace; }
   [data-testid="stDataFrame"],[data-testid="stTable"] { background:var(--paper); border:1px solid var(--line); border-radius:4px; }
   .ledger-card { background:var(--paper); border:1px solid var(--line); border-left:3px solid var(--teal); border-radius:4px; padding:.85rem 1rem; margin:.45rem 0; animation:rise-in .3s ease-out both; }
+  .restock-hero { display:flex; justify-content:space-between; gap:1rem; align-items:center; padding:1.1rem 1.25rem; margin:.75rem 0 1rem; background:linear-gradient(110deg,#fff8eb,#fff); border:1px solid #f0dfc0; border-left:5px solid #d97706; border-radius:8px; }
+  .restock-hero strong { display:block; color:var(--ink); font-size:1.05rem; }
+  .restock-hero span { display:block; color:var(--muted); line-height:1.5; margin-top:.2rem; }
+  .restock-guidance { height:100%; min-height:170px; padding:1rem; color:var(--ink); background:#fffaf1; border:1px solid #f0dfc0; border-radius:8px; line-height:1.5; }
+  .restock-guidance strong { color:var(--ink); }
+  .restock-result { padding:1rem; margin:.8rem 0; background:#fff; border:1px solid var(--line); border-left:4px solid #d97706; border-radius:8px; }
   .assistant-panel { background:var(--paper); border:1px solid #d9cdf5; border-top:3px solid var(--violet); padding:1rem 1.1rem; border-radius:4px; }
   .assistant-brand,.section-heading { display:flex; align-items:center; gap:.75rem; }
   .assistant-brand { align-items:flex-start; }
@@ -819,16 +825,43 @@ def _clear_copilot_context(tenant_id: str) -> None:
 def render_restock_page(tenant_id: str, business_name: str) -> None:
     """Ask the AI agent to prepare a tenant-scoped draft for human review."""
     _page_header("restock", "Restock AI", "The AI weighs this shop's stock, purchase history, budget and supplier choices.", "AI-PLANNED · HUMAN-APPROVED")
-    with st.form(f"restock_business_{tenant_id}"):
-        budget = st.number_input("Procurement cash budget (UGX)", min_value=1,
-                                 step=10000, value=300000, key=f"restock_budget_{tenant_id}")
-        request_context = st.text_area(
-            "Planning preference (optional)",
-            key=f"restock_preference_{tenant_id}",
-            placeholder="e.g. Prioritize calculators over pencils if the stock evidence supports it.",
-        )
-        st.caption("The AI chooses priorities and supplier trade-offs from your records. Python checks every figure and the budget; you approve or reject the saved draft.")
-        submitted = st.form_submit_button("Ask AI to plan restock", type="primary", width="stretch")
+    summary = shop_status(tenant_id)
+    with st.container(key="restock_overview"):
+        metrics = st.columns(3)
+        metrics[0].metric("Low-stock items", summary.get("low", "—"))
+        metrics[1].metric("Products tracked", summary.get("total", "—"))
+        metrics[2].metric("Drafts awaiting approval",
+                          summary.get("waiting") if summary.get("waiting") is not None else "—")
+    if summary.get("error"):
+        st.warning(f"Some shop records could not be loaded: {summary['error']}")
+
+    st.markdown(
+        '<div class="restock-hero"><div><strong>Build a plan from this shop\'s records</strong>'
+        '<span>Set a budget and an optional preference. The AI recommends; Python verifies every figure; '
+        'you approve any draft.</span></div><span class="tag-ai">NO AUTOMATIC ORDERS</span></div>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=f"restock_planner_{tenant_id}"):
+        with st.form(f"restock_business_{tenant_id}"):
+            inputs, guidance = st.columns([1.2, .8])
+            with inputs:
+                budget = st.number_input("Procurement cash budget (UGX)", min_value=1,
+                                         step=10000, value=300000, key=f"restock_budget_{tenant_id}")
+                request_context = st.text_area(
+                    "Planning preference (optional)",
+                    key=f"restock_preference_{tenant_id}",
+                    placeholder="e.g. Prioritize calculators over pencils if the stock evidence supports it.",
+                )
+            with guidance:
+                st.markdown(
+                    '<div class="restock-guidance"><strong>What happens next</strong><br>'
+                    '1. Read low-stock, purchase and quote records.<br>'
+                    '2. Compare priorities and suppliers within your budget.<br>'
+                    '3. Save a draft for your review — never send an order.<br><br>'
+                    '<strong>Missing quote/history?</strong> The item is flagged for your decision.</div>',
+                    unsafe_allow_html=True,
+                )
+            submitted = st.form_submit_button("Ask AI to plan restock", type="primary", width="stretch")
     if not submitted:
         return
     inventory = procurement.get_inventory(tenant_id=tenant_id)
@@ -855,9 +888,17 @@ def render_restock_page(tenant_id: str, business_name: str) -> None:
             st.warning(f"{len(plan['deferred'])} item(s) do not fit this budget and were deferred.")
         if plan and plan.get("needs_human"):
             st.info(f"{len(plan['needs_human'])} item(s) need a quote or purchase history before they can be priced.")
-        st.write(result.get("final_text", result.get("outcome", "No summary returned.")))
         if result.get("outcome") == "HANDOFF_MODEL_UNAVAILABLE":
-            st.warning("No draft was saved because the AI could not complete its review. Your records are unchanged; retry when the AI service is available.")
+            st.error("AI planning could not finish. No draft was saved, and no purchase was made.")
+            failure = (result.get("loop") or {}).get("failure_detail", "")
+            if failure:
+                st.caption(f"Provider diagnostics: {failure}")
+            st.info("If the provider details show 429, its account reached a request or token limit. Wait for the limit "
+                    "to reset, check the Gemini/Groq usage pages, then retry. Other configured Groq models are tried automatically.")
+        else:
+            st.markdown('<div class="restock-result"><strong>AI planning result</strong></div>',
+                        unsafe_allow_html=True)
+            st.write(result.get("final_text", result.get("outcome", "No summary returned.")))
         created = state.get("drafts_created", [])
         if created:
             st.success(f"Draft {created[0]} is saved to this business's approvals queue.")

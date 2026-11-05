@@ -38,15 +38,18 @@ Git push works from PowerShell (Git Credential Manager opens the browser). Do no
 
 `src/llm_client.py` tries Gemini first on each new request; when `GROQ_API_KEY` is configured,
 retryable Gemini quota/availability/network errors hand the same bounded conversation and tool history
-to the Groq Llama fallback. Remaining Gemini models stay after Groq in the fallback chain. The provider
-switch is not shown in the chat UI. Attempts are logged to `evidence/traces/llm_calls.jsonl`.
+to Groq (`openai/gpt-oss-20b` then `openai/gpt-oss-120b` by default; `GROQ_MODELS` overrides the list).
+After a model issues a tool call, the remaining turns stay within that provider so provider-specific
+tool-call metadata is not replayed across providers; if its models become unavailable, the agent safely
+hands off without drafting. The provider switch is not shown
+in the chat UI. Attempts are logged to `evidence/traces/llm_calls.jsonl`.
 
 ## 5. Current files
 
 | File | Purpose |
 |:---|:---|
-| `.env` (git-ignored) / `.env.example` | `GEMINI_API_KEY`, optional `GROQ_API_KEY` / `GROQ_MODEL`, Gemini model settings and LLM limits |
-| `src/llm_client.py` | Gemini-first provider chain; Groq receives the same conversation and tool-call history on fallback |
+| `.env` (git-ignored) / `.env.example` | `GEMINI_API_KEY`, optional `GROQ_API_KEY` / `GROQ_MODELS`, Gemini model settings and LLM limits |
+| `src/llm_client.py` | Gemini-first provider chain; Groq GPT-OSS fallback and provider-safe tool-call history |
 | `src/ai_engine.py` | `load_system_prompt()` (only BEGIN/END section), `load_csv()`, `parse_json()`, `analyze_inventory()` |
 | `src/test_models.py` | Lists usable models (`--probe` sends 1 request each) |
 | `prompts/procurement_assistant_v2.6.0.md` | **Current tool-mode prompt** for the Copilot and bounded restock agent. History in `prompts/prompt_history.md`; old versions in `prompts/archive/` |

@@ -205,11 +205,19 @@ def run_agent(user_message: str, user_name: str = "shop user",
     call_history: dict[str, list[dict]] = {}   # results so far per (tool, args) - repeated-call guard
     models_used: list[str] = []          # which model answered each turn
     unusable: set[str] = set()           # models out of quota during THIS run
-    final_text, stopped_reason, turn = "", "iteration_limit", 0
+    final_text, stopped_reason, failure_detail, turn = "", "iteration_limit", "", 0
 
     for turn in range(1, max_turns + 1):
-        # Prefer the model that answered the previous turn (see module docstring of llm_client).
-        order = ([models_used[-1]] + [m for m in MODELS if m != models_used[-1]]) if models_used else None
+        # Keep tool-call history within its provider: Gemini signatures cannot be
+        # replayed to Groq, while Groq's OpenAI-compatible history can move between
+        # Groq models if one hits quota. Gemini stays on the exact model that signed it.
+        if not models_used:
+            order = None
+        elif models_used[-1].startswith("groq:"):
+            order = [models_used[-1], *(m for m in MODELS
+                                        if m.startswith("groq:") and m != models_used[-1])]
+        else:
+            order = [models_used[-1]]
 
         def request(model: str):
             if model.startswith("groq:"):
@@ -218,8 +226,9 @@ def run_agent(user_message: str, user_name: str = "shop user",
 
         try:
             response, model, _ = call_with_fallback(request, f"agent:{run_id}:turn{turn}", unusable, order)
-        except AllModelsFailedError:
+        except AllModelsFailedError as exc:
             stopped_reason = "model_unavailable"
+            failure_detail = str(exc)
             break
         models_used.append(model)
 
@@ -295,6 +304,7 @@ def run_agent(user_message: str, user_name: str = "shop user",
         "steps": steps,
         "tool_calls": tool_calls,
         "models_used": models_used,
+        "failure_detail": failure_detail,
         "drafts_created": drafts,
         "output_warnings": output_warnings,
         "latency_s": round(time.monotonic() - started, 2),

@@ -116,7 +116,9 @@ sets quantities and verifies the budget.
 Copilot context is tenant-local, keeps four recent turns, and compacts older turns without an
 extra model call. Assistant replies can expand to show checked tool results and record evidence.
 Gemini receives every new request first; when configured, retryable Gemini failures pass the same
-bounded chat/tool context to Groq Llama without displaying the provider switch in the chat. Agent
+bounded chat/tool context to Groq GPT-OSS without displaying the provider switch in the chat. Once
+a model makes a tool call, the agent stays on that model for the remaining turn sequence so
+provider-specific tool metadata is not replayed to another model. Agent
 and model-attempt limits bound failures and keep each workflow auditable;
 they are not permission to skip evidence, Python validation or human review. Thoroughness takes
 precedence over latency, and no performance improvement is claimed until it is measured without
@@ -139,7 +141,7 @@ entered in the Render dashboard; adding it to this repository does not configure
 
 | Path | Contents |
 |:---|:---|
-| `src/llm_client.py` | Shared Gemini-first client with optional Groq Llama handoff, preserved context, timeouts and call traces |
+| `src/llm_client.py` | Shared Gemini-first client with optional Groq GPT-OSS handoff, preserved context, timeouts and call traces |
 | `src/ai_engine.py` | Week 2 context mode: loads the versioned prompt and CSVs, calls the model, parses JSON |
 | `src/tools/procurement.py` | Deterministic procurement tools: all quantities, prices, totals and budget checks |
 | `src/tools/registry.py` | Allow-list, argument validation, trusted context and tool traces — 9 tools in total |
@@ -166,8 +168,10 @@ entered in the Render dashboard; adding it to this repository does not configure
 ## Models
 
 `gemini-3.8-flash` is tried first. If it hits a retryable availability/quota error and `GROQ_API_KEY`
-is configured, the same request and tool history move to Groq Llama; other configured Gemini models
-remain in the fallback chain. The next user question always starts with Gemini again. Set provider keys
+is configured, Groq tries `openai/gpt-oss-20b` then `openai/gpt-oss-120b` by default (override with
+`GROQ_MODELS`). Once a model has made a tool call, fallback stays within that provider so Gemini's
+thought signatures are never replayed to Groq; if all same-provider models are unavailable, the agent
+hands off without creating a draft. The next user question always starts with Gemini again. Set provider keys
 in `.env` locally and as Render environment secrets; never put API keys in source code or Git.
 Rationale: `docs/requirements/model-selection.md`.
 

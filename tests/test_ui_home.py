@@ -368,6 +368,23 @@ def test_ui12_restocks_create_a_session_and_open_approvals_automatically():
     assert len(pending) == 2 and len({d["draft_id"] for d in pending}) == 2
 
 
+def test_ui_restock_provider_failure_explains_limit_and_keeps_draft_empty():
+    """A provider outage gives a useful retry hint and does not create an approval draft."""
+    at = fresh_app()
+    tenant_id = open_business(at, "UI Restock Provider Failure")
+    seed_one_low_item(tenant_id)
+    go_to_page(at, "Restock AI")
+    with fake_model(unavailable=True):
+        next(button for button in at.form_submit_button
+             if button.label == "Ask AI to plan restock").click().run()
+
+    assert not at.exception, at.exception
+    assert any("AI planning could not finish" in item.value for item in at.error)
+    assert any("limit" in item.value.lower() and "retry" in item.value.lower()
+               for item in at.info)
+    assert approvals.list_drafts(tenant_id=tenant_id, user_id="default-user") == []
+
+
 def test_ui13_approval_buttons_and_decision_are_session_safe():
     """The Approvals screen shows one draft with the AI's reasoning and two big
     buttons (Approve / Deny) plus a comments box; a reason is required to deny."""
@@ -496,7 +513,8 @@ def test_ui17_model_outage_does_not_save_non_ai_draft():
     with fake_model(unavailable=True):
         next(b for b in at.form_submit_button if b.label == "Ask AI to plan restock").click().run()
     assert not at.exception, at.exception
-    assert any("no draft was saved" in warning.value.lower() for warning in at.warning)
+    assert any("no draft was saved" in error.value.lower() for error in at.error)
+    assert any("wait for the limit to reset" in info.value.lower() for info in at.info)
     assert not approvals.list_drafts(tenant_id=tenant_id, user_id="default-user")
     assert at.session_state["workspace_page"] == "Restock AI"
 

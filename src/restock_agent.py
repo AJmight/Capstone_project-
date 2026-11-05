@@ -556,7 +556,8 @@ def run_restock(budget_ugx: int, user_name: str = "shop user",
         "final_text": final_text,
         "state": {k: v for k, v in asdict(state).items() if not k.startswith("_")},
         "loop": ({k: run[k] for k in ("run_id", "stopped_reason", "turns_used", "models_used",
-                                       "latency_s", "steps", "tool_calls", "output_warnings")}
+                                       "latency_s", "steps", "tool_calls", "output_warnings",
+                                       "failure_detail")}
                  if run else None),
         "limits": {"max_turns": MAX_TURNS, "max_tool_calls": MAX_TOOL_CALLS,
                    "tools": sorted(CONTRACT_TOOLS)},

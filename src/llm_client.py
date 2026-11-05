@@ -1,5 +1,5 @@
 """
-Shared Gemini-first client with optional Groq Llama fallback.
+Shared Gemini-first client with optional Groq fallback.
 ===================================================
 
 WHY THIS FILE EXISTS
@@ -12,7 +12,7 @@ THE FALLBACK POLICY
 -------------------
   1. Try Gemini first for every new user request.
   2. When GROQ_API_KEY is configured, send the same bounded conversation and
-     tool history to Groq Llama after a retryable Gemini outage/quota failure.
+     tool history to Groq after a retryable Gemini outage/quota failure.
   3. Other configured Gemini models remain after Groq in the fallback chain.
      The next user request starts with Gemini again, so recovery is automatic.
   4. Errors that another provider cannot fix (for example, a bad Gemini key or
@@ -61,8 +61,14 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_MODEL_ID = f"groq:{GROQ_MODEL}"
+_configured_groq_models = os.getenv("GROQ_MODELS")
+_default_groq_models = "openai/gpt-oss-20b,openai/gpt-oss-120b"
+_groq_model_list = (_configured_groq_models if _configured_groq_models else
+                    ",".join(filter(None, [os.getenv("GROQ_MODEL"), _default_groq_models])))
+GROQ_MODELS = list(dict.fromkeys(m.strip() for m in _groq_model_list.split(",") if m.strip()))
+GROQ_MODEL = GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b"
+GROQ_MODEL_IDS = [f"groq:{m}" for m in GROQ_MODELS]
+GROQ_MODEL_ID = GROQ_MODEL_IDS[0] if GROQ_MODEL_IDS else f"groq:{GROQ_MODEL}"
 GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Primary model. MODEL_NAME is the old Week 2 variable name, kept so old .env files still work.
@@ -84,14 +90,14 @@ TRACE_PATH = Path("evidence/traces/llm_calls.jsonl")               # where call 
 # provider fallback; the other Gemini models remain available if that also fails.
 GEMINI_MODELS = list(dict.fromkeys([PRIMARY_MODEL, *FALLBACK_MODELS]))
 MODELS = list(dict.fromkeys(
-    [PRIMARY_MODEL, *([GROQ_MODEL_ID] if GROQ_API_KEY else []), *FALLBACK_MODELS]
+    [PRIMARY_MODEL, *([*GROQ_MODEL_IDS] if GROQ_API_KEY else []), *FALLBACK_MODELS]
 ))
 MAX_MODEL_ATTEMPTS = max(1, int(os.getenv("LLM_MAX_MODEL_ATTEMPTS", str(len(MODELS)))))
 
 
 def groq_fallback_configured() -> bool:
     """Report whether this running process can actually call its Groq fallback."""
-    return bool(GROQ_API_KEY and GROQ_MODEL_ID in MODELS)
+    return bool(GROQ_API_KEY and any(m in MODELS for m in GROQ_MODEL_IDS))
 
 # Fail early with a clear message instead of a confusing SDK error later.
 if not API_KEY:
@@ -258,7 +264,10 @@ def _groq_generate_content(model: str, contents: list[types.Content],
 
     response = httpx.post(
         GROQ_CHAT_COMPLETIONS_URL,
-        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "User-Agent": "SMEProcurementAssistant/1.0",
+        },
         json=payload,
         timeout=REQUEST_TIMEOUT_S,
     )

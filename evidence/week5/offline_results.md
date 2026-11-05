@@ -1,6 +1,6 @@
 # Week 5 Offline Agent Tests
 
-Run at 2026-10-29T11:59:59 | **20/20 passed**
+Run at 2026-11-05T09:00:05 | **20/20 passed**
 
 | id | test | passed | detail |
 |---|---|---|---|
@@ -14,7 +14,7 @@ Run at 2026-10-29T11:59:59 | **20/20 passed**
 | A-06 | A model that drafts items outside the plan is caught: POSTCONDITION_FAILED, flagged on the draft. | **PASS** |  |
 | A-07 | Two drafts in one run break 'at most one draft' -> POSTCONDITION_FAILED. | **PASS** |  |
 | A-08 | A model repeating the same call is blocked (REPEATED_CALL) and stopped by the turn limit. | **PASS** |  |
-| A-09 | compare_supplier_quotes is a real tool but not in this task's contract -> blocked. | **PASS** |  |
+| A-09 | Approval is not an agent capability and is blocked before registry execution. | **PASS** |  |
 | A-10 | Every model 503 -> clear hand-off; no non-AI restock plan or draft is created. | **PASS** |  |
 | A-10b | An unavailable model never creates a draft, regardless of the budget. | **PASS** |  |
 | A-11 | If the summary omits 'AWAITING HUMAN APPROVAL', the run is not reported as ready. | **PASS** |  |
